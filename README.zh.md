@@ -34,6 +34,16 @@ pnpm run build
 pnpm dsh web
 ```
 
+### 通过 Docker 运行
+
+仓库提供了从源码构建 Web UI 的 [Dockerfile](Dockerfile) 和用于启动服务的 [compose 文件](docker-compose.yml):
+
+```sh
+docker compose up -d
+```
+
+随后可通过 `http://127.0.0.1:3080` 访问 Web UI。API 密钥、会话与设置持久化在挂载于容器 `~/.dsh` 的命名卷中;项目目录挂载在 `/workspace`,是 agent 的默认文件系统位置。compose 的端口映射只暴露宿主机回环。局域网暴露、镜像标签、在容器中运行 headless CLI 等见 [Docker 指南](docs/user/guide/docker.md)。
+
 ## 社区与支持
 
 - 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。

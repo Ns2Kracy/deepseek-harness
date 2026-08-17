@@ -1,0 +1,10 @@
+# Docker bind overlay: the web command deliberately rejects --host 0.0.0.0, and
+# a container is unreachable through a published port while the server binds
+# loopback. This overlay sets the webserver row to the documented all-interfaces
+# posture instead. The port still follows --port (default 3080), and the /api
+# browser-trust fence keeps refusing undeclared non-loopback authorities, so LAN
+# access still requires --trusted-host.
+- id: webserver
+  config:
+    host: 0.0.0.0
+    port: !!js ctx.webStartup.port ?? 3080

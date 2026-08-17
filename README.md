@@ -34,6 +34,16 @@ pnpm run build
 pnpm dsh web
 ```
 
+### Run in Docker
+
+The repository ships a [Dockerfile](Dockerfile) that builds the Web UI from source and a [compose file](docker-compose.yml) that serves it:
+
+```sh
+docker compose up -d
+```
+
+The Web UI is then available at `http://127.0.0.1:3080`. API keys, sessions, and settings persist in a named volume mounted at the container's `~/.dsh`; the project directory is mounted at `/workspace` and is the agent's default filesystem location. The compose mapping exposes the host loopback only. See the [Docker guide](docs/user/guide/docker.md) for LAN exposure, image tags, and running the headless CLI inside a container.
+
 ## Community and support
 
 - Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

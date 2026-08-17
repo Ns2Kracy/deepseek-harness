@@ -1,0 +1,29 @@
+# DeepSeek Harness Web UI in Docker.
+#
+# The image's default command applies /opt/dsh/docker-web.patch.yml, the overlay
+# that sets the documented all-interfaces bind for the container. This compose
+# file publishes the port on the host loopback only, so the local browser is
+# accepted by the /api trust fence without further flags. To serve the LAN,
+# change the mapping to "3080:3080" and add the serving authorities to the
+# command with --trusted-host (see docs/user/guide/docker.md).
+services:
+  dsh:
+    image: ghcr.io/ns2kracy/deepseek-harness:latest
+    init: true
+    command: ["web", "--patch", "/opt/dsh/docker-web.patch.yml"]
+    environment:
+      DSH_TELEMETRY_DISABLED: "1"
+    env_file:
+      - path: .env
+        required: false
+    # Override the published authority with DSH_HOST_PORT (e.g. for a local
+    # deployment that must not collide with another server on 3080).
+    ports:
+      - "${DSH_HOST_PORT:-127.0.0.1:3080}:3080"
+    volumes:
+      - dsh-home:/home/node/.dsh
+      - .:/workspace
+    restart: unless-stopped
+
+volumes:
+  dsh-home:
