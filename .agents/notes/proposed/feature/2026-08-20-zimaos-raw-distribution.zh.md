@@ -18,7 +18,7 @@ CasaOS 模块宿主与 `dsh web` 不同源。浏览器客户端使用同源的 `
 
 镜像携带一个在版本控制构建配置中选定的精确 Node.js 24 Linux x64 版本，并通过 Node.js 发布的 SHA-256 清单验证。应用目录是从完整构建后的 workspace 生成并实体化的生产依赖闭包，不包含 workspace 符号链接；它在普通的内置 Node.js 下运行，不依赖 tsx、源码路径、调用方的 `node_modules` 或暂存根目录之外的文件。
 
-systemd 服务设置 `DSH_HOME=/var/lib/casaos/deepseek_harness`，读取可选的 `/var/lib/casaos/deepseek_harness/.env`，并在进程失败后重启。启动器创建可写状态目录，然后以 `dsh --profile web --host 0.0.0.0 --port 3080 --no-open` 执行暂存后的 CLI。它不注册 CasaOS Gateway 路由，也不依赖 CasaOS message bus。
+systemd 服务设置 `DSH_HOME=/var/lib/casaos/deepseek_harness`，读取可选的 `/var/lib/casaos/deepseek_harness/.env`，并在进程失败后重启。启动器创建可写状态目录，然后以 `dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --port 3080 --no-open` 执行暂存后的 CLI。受版本控制的 overlay 只把 `webserver` 行设为 `host: 0.0.0.0`；公共 CLI 仍拒绝 `--host 0.0.0.0`，避免其他部署意外暴露远程代码执行能力。该服务不注册 CasaOS Gateway 路由，也不依赖 CasaOS message bus。
 
 CasaOS 模块目录包含图标和一个禁用缓存的轻量启动页。该页面从当前位置取得 ZimaOS 主机名，并把新标签页导航到 `http://<host>:3080/`。完整的 DeepSeek Harness 前端仍由 `dsh web` 拥有和提供，从而保持 `/api` 请求与 WebSocket upgrade 同源。
 
