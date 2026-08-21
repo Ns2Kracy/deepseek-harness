@@ -14,6 +14,7 @@ const moduleFace = modulesClient as unknown as Record<string, unknown>
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   delete win.__DSH_BOOT__
   delete win.__ModuleLoader__
   document.body.innerHTML = ''
@@ -130,6 +131,68 @@ describe('plugin activation', () => {
     expect(target.mode).toBe('live')
     expect(events).toEqual(['consumer', 'mount'])
     expect(container.textContent).toBe('mounted')
+    await entry.dispose()
+  })
+
+  it('preserves native randomUUID', async () => {
+    const randomUUID = vi.fn(() => 'native-id')
+    vi.stubGlobal('crypto', { randomUUID })
+    const container = document.createElement('div')
+    document.body.append(container)
+    installFacade()
+    const entry = new AppWebEntry(container)
+
+    await entry.run()
+
+    expect(Object.getOwnPropertyDescriptor(crypto, 'randomUUID')?.value).toBe(randomUUID)
+    await entry.dispose()
+  })
+
+  it('installs randomUUID before activating plugins on insecure origins', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues(bytes: Uint8Array) {
+        return bytes.fill(0)
+      },
+    })
+    const ids: string[] = []
+    const container = document.createElement('div')
+    document.body.append(container)
+    const target = installFacade()
+    win.__DSH_BOOT__ = {
+      rev: 'graph',
+      entries: [
+        { id: MODULES_ID, url: '/modules.js', rev: '1' },
+        { id: 'uuid-consumer', url: '/uuid-consumer.js', rev: '1' },
+        { id: 'renderer', url: '/renderer.js', rev: '1' },
+      ],
+    }
+    const registrations = new Map<string, ClientBundleRegistration>([
+      ['/uuid-consumer.js', {
+        id: 'uuid-consumer',
+        factory: () => ({
+          apply: () => { ids.push(crypto.randomUUID()) },
+        }),
+      }],
+      ['/renderer.js', {
+        id: 'renderer',
+        factory: () => ({
+          apply: (ctx: Context) => {
+            ctx.reflect.provide('uiRenderer', { mount: () => () => {} })
+          },
+        }),
+      }],
+    ])
+    const entry = new AppWebEntry(container, {
+      loadBundle: async (url) => {
+        const registration = registrations.get(url)
+        if (registration === undefined) throw new Error(`missing fixture registration ${url}`)
+        target.load(registration)
+      },
+    })
+
+    await entry.run()
+
+    expect(ids).toEqual(['00000000-0000-4000-8000-000000000000'])
     await entry.dispose()
   })
 })
