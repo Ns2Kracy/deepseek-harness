@@ -18,11 +18,11 @@ CasaOS 模块宿主与 `dsh web` 不同源。浏览器客户端使用同源的 `
 
 镜像内置 Linux x64 的 Node.js `v24.19.0`。`scripts/build-zimaos-raw.ts` 下载归档和官方 `SHASUMS256.txt`，验证对应归档的精确 digest，并且只缓存以 digest 为键且已经验证的归档。`zimaos/runtime/package.json` 独立于 Python SDK runtime，拥有 Web 生产闭包。组装器以仓库 lockfile 运行 pnpm legacy deploy，并遵守 `pnpm-workspace.yaml` 中按软件包审查的 `allowBuilds`；构建子进程会删除名称表示凭据的环境变量。组装器实体化链接，补入 deploy 遗漏的 vendored `cosmokit` 与 `schemastery` runtime 包，删除开发依赖元数据，并以原子替换方式重写剩余 workspace range，避免 pnpm hardlink 修改源码 manifest。静态验证会拒绝应用目录中的符号链接、暂存闭包中缺失的必需生产依赖、残留的 `workspace:` range、缺失的动态资源，以及 ELF machine 不是 Linux x64 的原生产物。Landlock 软件包 verifier 还会拒绝占位文件与未声明二进制。
 
-systemd 服务设置 `DSH_HOME=/var/lib/casaos/deepseek_harness`，读取可选的 `/var/lib/casaos/deepseek_harness/.env`，并在失败后重启。启动器创建可写状态目录，随后用内置 Node.js 执行暂存后的 CLI、ZimaOS overlay、3080 端口和 `--no-open`。组装器专用的 `--staged-root` 参数允许 Linux CI 在不挂载镜像的情况下探测同一个启动器。overlay 完整重述 `webserver` 行，并选择 `host: 0.0.0.0`；公共 CLI 仍拒绝 `--host 0.0.0.0`。
+systemd 服务设置 `DSH_HOME=/var/lib/casaos/deepseek_harness`，读取可选的 `/var/lib/casaos/deepseek_harness/.env`，并在失败后重启。启动器将可选的 `DSH_ZIMAOS_TRUSTED_HOST` 映射为一个正确引用的 `--trusted-host` 参数，创建可写状态目录，随后用内置 Node.js 执行暂存后的 CLI、ZimaOS overlay、3080 端口和 `--no-open`。组装器专用的 `--staged-root` 参数允许 Linux CI 在不挂载镜像的情况下探测同一个启动器。overlay 完整重述 `webserver` 行，并选择 `host: 0.0.0.0`；公共 CLI 仍拒绝 `--host 0.0.0.0`。
 
 该服务不注册 CasaOS Gateway 路由，也不依赖 CasaOS message bus。CasaOS 模块提供禁用缓存的启动页，保留当前主机名并导航到 `http://<host>:3080/`。完整前端仍由 `dsh web` 提供，从而保持 `/api` 请求与 WebSocket upgrade 同源。
 
-组装器验证标识与必需路径，使用内置 Node.js 运行暂存后的 CLI，并在 Linux x64 上启动暂存启动器、探测 Web shell 和 `/api/host.describe`、拒绝不可信 Host authority，并要求有界停止。它将暂存 inode 时间规范化为 `SOURCE_DATE_EPOCH` 或源码 commit 时间，并以固定创建时间、root 所有权、`-noappend` 与 `-no-xattrs` 创建 SquashFS；在 `unsquashfs` 可用时检查镜像必需路径，并在镜像旁写入 SHA-256 文件。构建输出只保存在已忽略的构建位置。
+组装器验证标识与必需路径，使用内置 Node.js 运行暂存后的 CLI，并在 Linux x64 上启动暂存启动器、探测 Web shell 和 `/api/host.describe`、接受通过 `DSH_ZIMAOS_TRUSTED_HOST` 配置的 authority、拒绝不可信 Host authority，并要求有界停止。它将暂存 inode 时间规范化为 `SOURCE_DATE_EPOCH` 或源码 commit 时间，并以固定创建时间、root 所有权、`-noappend` 与 `-no-xattrs` 创建 SquashFS；在 `unsquashfs` 可用时检查镜像必需路径，并在镜像旁写入 SHA-256 文件。构建输出只保存在已忽略的构建位置。
 
 ## 考虑过的替代方案
 

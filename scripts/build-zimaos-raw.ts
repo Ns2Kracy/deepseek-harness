@@ -46,6 +46,7 @@ const DEFAULT_OUTPUT = `${MODULE_ID}.raw`
 const LOG_PREFIX = 'build-zimaos-raw'
 const PROBE_TIMEOUT_MS = 30_000
 const ELF_X64_MACHINE = 62
+const TRUSTED_HOST_PROBE_AUTHORITY = 'zimaos-probe.invalid:3080'
 const SENSITIVE_ENV_NAME =
   /(?:^|_)(?:API_?KEY|ACCESS_?KEY(?:_ID)?|TOKEN|SECRET|PASSWORD|PASS|CREDENTIALS?|AUTH)(?:_|$)/iu
 
@@ -522,7 +523,7 @@ class ZimaOsRawBuild {
           `${LOG_PREFIX}: [dry-run] probe http://127.0.0.1:3080${path}`,
         )
       console.log(
-        `${LOG_PREFIX}: [dry-run] reject untrusted Host authority and require bounded shutdown`,
+        `${LOG_PREFIX}: [dry-run] accept configured Host ${TRUSTED_HOST_PROBE_AUTHORITY}, reject an untrusted Host, and require bounded shutdown`,
       )
       return
     }
@@ -540,6 +541,7 @@ class ZimaOsRawBuild {
         ...buildSubprocessEnvironment(process.env),
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
+        DSH_ZIMAOS_TRUSTED_HOST: TRUSTED_HOST_PROBE_AUTHORITY,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -567,6 +569,15 @@ class ZimaOsRawBuild {
         throw new Error(
           `${LOG_PREFIX}: host description probe returned ${hostDescription.status}.`,
         )
+      const trusted = await httpGet(
+        '/api/host.describe',
+        TRUSTED_HOST_PROBE_AUTHORITY,
+      )
+      if (trusted.status >= 400) {
+        throw new Error(
+          `${LOG_PREFIX}: configured browser authority returned ${trusted.status}.`,
+        )
+      }
       const untrusted = await httpGet(
         untrustedHostProbePath(),
         'untrusted.invalid',
