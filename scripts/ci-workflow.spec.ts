@@ -452,6 +452,7 @@ describe('ZimaOS RAW workflow', () => {
     expect(buildJson).toContain('pnpm install --frozen-lockfile')
     expect(buildJson).toContain('squashfs-tools')
     expect(buildJson).toContain('xz-utils')
+    expect(buildJson).toContain('musl-tools')
     expect(buildJson).toContain('pnpm run build:zimaos-raw')
     expect(buildJson).toContain('sha256sum -c deepseek_harness.raw.sha256')
     expect(buildJson).toContain(

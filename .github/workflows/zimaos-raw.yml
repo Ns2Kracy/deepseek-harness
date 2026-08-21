@@ -41,7 +41,7 @@ jobs:
       - name: Install image tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq squashfs-tools xz-utils
+          sudo apt-get install -yq musl-tools squashfs-tools xz-utils
 
       - name: Build and probe RAW image
         run: pnpm run build:zimaos-raw
