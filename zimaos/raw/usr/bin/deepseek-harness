@@ -1,11 +1,20 @@
 #!/bin/sh
 set -eu
 
-state=/var/lib/casaos/deepseek_harness
+root=
+if [ "${1:-}" = "--staged-root" ]; then
+  [ "$#" -eq 2 ] || { echo 'deepseek-harness: --staged-root requires one path' >&2; exit 2; }
+  root=$2
+elif [ "$#" -ne 0 ]; then
+  echo 'deepseek-harness: unexpected arguments' >&2
+  exit 2
+fi
+
+state=${DSH_HOME:-/var/lib/casaos/deepseek_harness}
 install -d -m 0700 "$state"
 export DSH_HOME="$state"
 
-exec /usr/lib/deepseek-harness/node/bin/node \
-  /usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js \
-  web --patch /usr/lib/deepseek-harness/zimaos.patch.yml \
+exec "$root/usr/lib/deepseek-harness/node/bin/node" \
+  "$root/usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+  web --patch "$root/usr/lib/deepseek-harness/zimaos.patch.yml" \
   --port 3080 --no-open

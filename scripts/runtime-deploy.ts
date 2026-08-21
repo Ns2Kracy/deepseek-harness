@@ -1,8 +1,16 @@
 /** Assemble a symlink-free production runtime from pnpm's legacy deploy output. */
 
-import { existsSync } from 'node:fs'
-import { cp, lstat, mkdir, readFile, readdir, realpath, rm, unlink } from 'node:fs/promises'
-import { dirname, join, resolve, sep } from 'node:path'
+import {
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  unlink,
+} from 'node:fs/promises'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 
 const sourceRoot = resolve(import.meta.dirname, '..')
 
@@ -30,9 +38,11 @@ export interface RuntimeDeployOptions {
  * @param options - deployment paths, callback, logging, and dry-run settings.
  * @returns when the runtime closure is assembled or its dry run is complete.
  */
-export async function deployRuntimeClosure(options: RuntimeDeployOptions): Promise<void> {
+export async function deployRuntimeClosure(
+  options: RuntimeDeployOptions,
+): Promise<void> {
   const staging = resolve(options.staging)
-  assertSafeStaging(staging, options.logPrefix)
+  await assertSafeStagingPath(staging, sourceRoot, options.logPrefix)
   if (options.dryRun === true) {
     console.log(`${options.logPrefix}: [dry-run] rm -rf ${staging}`)
   } else {
@@ -52,53 +62,168 @@ export async function deployRuntimeClosure(options: RuntimeDeployOptions): Promi
   ])
 
   if (options.dryRun === true) {
-    console.log(`${options.logPrefix}: [dry-run] restore direct dependencies omitted by legacy deploy`)
-    console.log(`${options.logPrefix}: [dry-run] materialize staged package links`)
+    console.log(
+      `${options.logPrefix}: [dry-run] restore direct dependencies omitted by legacy deploy`,
+    )
+    console.log(
+      `${options.logPrefix}: [dry-run] materialize staged package links`,
+    )
     for (const name of options.removeNames ?? []) {
-      console.log(`${options.logPrefix}: [dry-run] rm -f ${join(staging, name)}`)
+      console.log(
+        `${options.logPrefix}: [dry-run] rm -f ${join(staging, name)}`,
+      )
     }
     return
   }
 
-  await restoreDirectDependencies(staging, resolve(options.sourceNodeModules), options.logPrefix)
+  await restoreDirectDependencies(
+    staging,
+    resolve(options.sourceNodeModules),
+    options.logPrefix,
+  )
   await materializePackageLinks(staging)
-  await Promise.all((options.removeNames ?? []).map(name => removePathSafely(join(staging, name))))
+  await Promise.all(
+    (options.removeNames ?? []).map(name =>
+      removePathSafely(join(staging, name)),
+    ),
+  )
 }
 
-function assertSafeStaging(staging: string, logPrefix: string): void {
-  if (staging === sourceRoot || sourceRoot.startsWith(staging + sep)) {
-    throw new Error(`${logPrefix}: refusing to clear staging dir ${staging}: it contains the repo root.`)
+/**
+ * Reject a staging path that can remove the protected root through lexical or
+ * symlinked ancestors.
+ * @param staging - path that will be removed recursively.
+ * @param protectedRoot - repository or other root that must survive removal.
+ * @param logPrefix - diagnostic prefix.
+ * @returns when the staging path is safe to remove.
+ */
+export async function assertSafeStagingPath(
+  staging: string,
+  protectedRoot: string,
+  logPrefix: string,
+): Promise<void> {
+  const resolvedStaging = resolve(staging)
+  const resolvedProtected = resolve(protectedRoot)
+  const stagingFromProtected = relative(resolvedProtected, resolvedStaging)
+  const protectedFromStaging = relative(resolvedStaging, resolvedProtected)
+  const lexicalStagingIsInside = isInside(stagingFromProtected)
+  if (protectedFromStaging === '' || isInside(protectedFromStaging)) {
+    throw new Error(
+      `${logPrefix}: refusing to clear staging dir ${resolvedStaging}: it contains the repo root.`,
+    )
+  }
+
+  const [physicalStaging, physicalProtected] = await Promise.all([
+    projectThroughExistingAncestor(resolvedStaging),
+    realpath(resolvedProtected),
+  ])
+  const physicalStagingFromProtected = relative(
+    physicalProtected,
+    physicalStaging,
+  )
+  const physicalProtectedFromStaging = relative(
+    physicalStaging,
+    physicalProtected,
+  )
+  const expectedPhysicalStaging = lexicalStagingIsInside
+    ? resolve(physicalProtected, stagingFromProtected)
+    : undefined
+  if (
+    physicalProtectedFromStaging === '' ||
+    isInside(physicalProtectedFromStaging) ||
+    (expectedPhysicalStaging !== undefined &&
+      physicalStaging !== expectedPhysicalStaging) ||
+    (!lexicalStagingIsInside && isInside(physicalStagingFromProtected))
+  ) {
+    throw new Error(
+      `${logPrefix}: refusing to clear staging dir ${resolvedStaging}: a symlinked ancestor reaches the repo root.`,
+    )
   }
 }
 
-async function restoreDirectDependencies(staging: string, sourceNodeModules: string, logPrefix: string): Promise<void> {
+function isInside(relativePath: string): boolean {
+  return (
+    relativePath !== '' &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${sep}`)
+  )
+}
+
+async function projectThroughExistingAncestor(path: string): Promise<string> {
+  const remaining: string[] = []
+  let ancestor = path
+  while (true) {
+    try {
+      return resolve(await realpath(ancestor), ...remaining.reverse())
+    } catch (error) {
+      if (!isMissingPathError(error)) throw error
+      const parent = dirname(ancestor)
+      if (parent === ancestor) throw error
+      remaining.push(
+        ancestor.slice(parent.length + (parent.endsWith(sep) ? 0 : 1)),
+      )
+      ancestor = parent
+    }
+  }
+}
+
+async function restoreDirectDependencies(
+  staging: string,
+  sourceNodeModules: string,
+  logPrefix: string,
+): Promise<void> {
   const manifestPath = join(staging, 'package.json')
-  const manifest = parseManifest(await readFile(manifestPath, 'utf8'), manifestPath, logPrefix)
-  const dependencies = Object.keys(manifest.dependencies ?? {}).sort((left, right) => left.localeCompare(right))
+  const manifest = parseManifest(
+    await readFile(manifestPath, 'utf8'),
+    manifestPath,
+    logPrefix,
+  )
+  const dependencies = Object.keys(manifest.dependencies ?? {}).sort(
+    (left, right) => left.localeCompare(right),
+  )
   const restored: string[] = []
   for (const dependency of dependencies) {
     const destination = join(staging, 'node_modules', dependency)
-    if (existsSync(destination)) continue
+    if (await pathResolves(destination)) continue
+    await removePathSafely(destination)
     const source = join(sourceNodeModules, dependency)
-    if (!existsSync(source)) {
-      throw new Error(`${logPrefix}: deployed dependency ${dependency} is absent from both ${destination} and ${source}.`)
+    if (!(await pathResolves(source))) {
+      throw new Error(
+        `${logPrefix}: deployed dependency ${dependency} is absent from both ${destination} and ${source}.`,
+      )
     }
     await mkdir(dirname(destination), { recursive: true })
     await copyPackageWithoutNestedDependencies(source, destination)
     restored.push(dependency)
   }
-  const stillMissing = dependencies.filter(dependency => !existsSync(join(staging, 'node_modules', dependency)))
-  if (stillMissing.length > 0) {
-    throw new Error(`${logPrefix}: staged dependencies remain missing: ${stillMissing.join(', ')}.`)
+  const stillMissing: string[] = []
+  for (const dependency of dependencies) {
+    if (!(await pathResolves(join(staging, 'node_modules', dependency))))
+      stillMissing.push(dependency)
   }
-  if (restored.length > 0) console.log(`${logPrefix}: restored legacy deploy hoists: ${restored.join(', ')}`)
+  if (stillMissing.length > 0) {
+    throw new Error(
+      `${logPrefix}: staged dependencies remain missing: ${stillMissing.join(', ')}.`,
+    )
+  }
+  if (restored.length > 0)
+    console.log(
+      `${logPrefix}: restored legacy deploy hoists: ${restored.join(', ')}`,
+    )
 }
 
-function parseManifest(contents: string, manifestPath: string, logPrefix: string): { dependencies?: Record<string, string> } {
+function parseManifest(
+  contents: string,
+  manifestPath: string,
+  logPrefix: string,
+): { dependencies?: Record<string, string> } {
   try {
     return JSON.parse(contents) as { dependencies?: Record<string, string> }
   } catch (error) {
-    throw new Error(`${logPrefix}: cannot parse deployed manifest ${manifestPath}.`, { cause: error })
+    throw new Error(
+      `${logPrefix}: cannot parse deployed manifest ${manifestPath}.`,
+      { cause: error },
+    )
   }
 }
 
@@ -109,7 +234,9 @@ async function materializePackageLinks(staging: string): Promise<void> {
     const segments = remaining.slice(nodeModules.length + 1).split(sep)
     const binIndex = segments.lastIndexOf('.bin')
     if (binIndex >= 0) {
-      await removePathSafely(join(nodeModules, ...segments.slice(0, binIndex + 1)))
+      await removePathSafely(
+        join(nodeModules, ...segments.slice(0, binIndex + 1)),
+      )
     } else {
       const source = await realpath(remaining)
       await unlink(remaining)
@@ -119,12 +246,16 @@ async function materializePackageLinks(staging: string): Promise<void> {
   }
 }
 
-async function copyPackageWithoutNestedDependencies(source: string, destination: string): Promise<void> {
+async function copyPackageWithoutNestedDependencies(
+  source: string,
+  destination: string,
+): Promise<void> {
   const nestedNodeModules = join(source, 'node_modules')
   await cp(source, destination, {
     recursive: true,
     dereference: true,
-    filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
+    filter: path =>
+      path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
   })
 }
 
@@ -141,7 +272,22 @@ async function findSymlink(directory: string): Promise<string | undefined> {
   return undefined
 }
 
-async function removePathSafely(path: string): Promise<void> {
+async function pathResolves(path: string): Promise<boolean> {
+  try {
+    await realpath(path)
+    return true
+  } catch (error) {
+    if (isMissingPathError(error)) return false
+    throw error
+  }
+}
+
+/**
+ * Unlink a link-shaped path or recursively remove a real directory.
+ * @param path - path to remove without following a final symlink.
+ * @returns when the path is absent.
+ */
+export async function removePathSafely(path: string): Promise<void> {
   let metadata
   try {
     metadata = await lstat(path)
