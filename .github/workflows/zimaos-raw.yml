@@ -1,0 +1,120 @@
+# Build the Linux amd64 ZimaOS extension on every change and move the rolling
+# `latest` release only after a dsh-v* tag build has passed.
+name: ZimaOS RAW
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - master
+    tags:
+      - 'dsh-v*'
+
+concurrency:
+  group: zimaos-raw-${{ startsWith(github.ref, 'refs/tags/dsh-v') && 'release' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Linux amd64 RAW
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install image tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq squashfs-tools xz-utils
+
+      - name: Build and probe RAW image
+        run: pnpm run build:zimaos-raw
+
+      - name: Verify checksum
+        run: sha256sum -c deepseek_harness.raw.sha256
+
+      - name: Upload RAW artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: zimaos-raw-${{ github.sha }}
+          path: |
+            deepseek_harness.raw
+            deepseek_harness.raw.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-latest:
+    name: Publish rolling latest release
+    if: startsWith(github.ref, 'refs/tags/dsh-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download verified RAW artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: zimaos-raw-${{ github.sha }}
+
+      - name: Verify downloaded RAW checksum
+        run: sha256sum -c deepseek_harness.raw.sha256
+
+      - name: Stage and publish latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          newest_tag="$(git tag --list 'dsh-v*' --sort=-v:refname | head -n1)"
+          if [[ "$GITHUB_REF_NAME" != "$newest_tag" ]]; then
+            echo "Refusing to move latest backwards from $newest_tag to $GITHUB_REF_NAME." >&2
+            exit 1
+          fi
+
+          if gh release view latest >/dev/null 2>&1; then
+            release_id="$(gh release view latest --json databaseId --jq .databaseId)"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=true -F prerelease=false >/dev/null
+          else
+            release_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name=latest -f target_commitish="$GITHUB_SHA" \
+              -f name='DeepSeek Harness ZimaOS RAW (latest)' \
+              -f body='Rolling Linux amd64 ZimaOS RAW build from the latest dsh-v* tag.' \
+              -F draft=true -F prerelease=false --jq .id)"
+          fi
+
+          gh release upload latest deepseek_harness.raw deepseek_harness.raw.sha256 --clobber
+          gh release view latest --json isDraft,isPrerelease,tagName,assets \
+            | jq -e '.isDraft == true and .isPrerelease == false and .tagName == "latest"
+              and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
+
+          git tag -f latest "$GITHUB_SHA"
+          gh auth setup-git
+          git push origin refs/tags/latest --force
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease=false -f make_latest=true >/dev/null
+          gh release edit latest --latest
+          gh release view latest --json isDraft,isPrerelease,tagName,assets \
+            | jq -e '.isDraft == false and .isPrerelease == false and .tagName == "latest"
+              and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
