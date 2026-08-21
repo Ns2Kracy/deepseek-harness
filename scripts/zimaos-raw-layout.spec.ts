@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { verifyRuntimeClosure } from './verify-runtime-closure.ts'
 
 const rawRoot = resolve(import.meta.dirname, '../zimaos/raw')
 const launcherPath = 'usr/bin/deepseek-harness'
@@ -22,6 +23,20 @@ interface CasaOsModule {
 }
 
 describe('ZimaOS RAW source layout', () => {
+  it('declares a closed production workspace-peer graph', async () => {
+    const result = await verifyRuntimeClosure(
+      resolve(import.meta.dirname, '..'),
+      'zimaos/runtime/package.json',
+      {
+        checkPresetPlugins: false,
+        requireExplicitWorkspacePeers: false,
+      },
+    )
+
+    expect(result.failures).toEqual([])
+    expect(result.workspacePackageCount).toBeGreaterThan(1)
+  })
+
   it('declares one consistent extension, service, and CasaOS module identity', async () => {
     const extensionRelease = await fixture(extensionReleasePath)
     const service = await fixture(servicePath)

@@ -176,14 +176,35 @@ export function assertRequiredModulePaths(stagedRoot: string): void {
   }
 }
 
-/** @returns HTTP paths exercised by the keyless Web runtime probe. */
-export function webProbePaths(): readonly string[] {
-  return ['/', '/api/host.describe']
+interface HttpProbeRequest {
+  readonly path: string
+  readonly method: 'GET' | 'POST'
+  readonly body?: object
 }
 
-/** Protected API route used to prove Host-authority rejection. */
-export function untrustedHostProbePath(): string {
-  return '/api/host.describe'
+/** @returns HTTP requests exercised by the keyless Web runtime probe. */
+export function webProbeRequests(): readonly HttpProbeRequest[] {
+  return [
+    { path: '/', method: 'GET' },
+    {
+      path: '/api/host.describe',
+      method: 'POST',
+      body: {
+        type: 'client-request',
+        rpcId: 'zimaos-runtime-probe',
+        method: 'host.describe',
+        payload: {},
+      },
+    },
+  ]
+}
+
+/** @returns protected API request used to prove Host-authority rejection. */
+export function untrustedHostProbeRequest(): HttpProbeRequest {
+  const request = webProbeRequests()[1]
+  if (request === undefined)
+    throw new Error(`${LOG_PREFIX}: protected Web probe request is missing.`)
+  return request
 }
 
 /**
@@ -518,9 +539,9 @@ class ZimaOsRawBuild {
       console.log(
         `${LOG_PREFIX}: [dry-run] launch staged /usr/bin/${SERVICE_NAME} --staged-root ${this.rawRoot} with temporary DSH_HOME`,
       )
-      for (const path of webProbePaths())
+      for (const probe of webProbeRequests())
         console.log(
-          `${LOG_PREFIX}: [dry-run] probe http://127.0.0.1:3080${path}`,
+          `${LOG_PREFIX}: [dry-run] probe ${probe.method} http://127.0.0.1:3080${probe.path}`,
         )
       console.log(
         `${LOG_PREFIX}: [dry-run] accept configured Host ${TRUSTED_HOST_PROBE_AUTHORITY}, reject an untrusted Host, and require bounded shutdown`,
@@ -553,24 +574,21 @@ class ZimaOsRawBuild {
       output += chunk.toString()
     })
     try {
-      await waitForHttp(
-        '/',
+      await waitForHttpRequest(
+        { path: '/', method: 'GET' },
         '127.0.0.1:3080',
         response =>
           response.status >= 200 &&
           response.status < 400 &&
           /DeepSeek Harness|id=["']root["']/u.test(response.body),
       )
-      const hostDescription = await httpGet(
-        '/api/host.describe',
+      await waitForHttpRequest(
+        untrustedHostProbeRequest(),
         '127.0.0.1:3080',
+        response => response.status >= 200 && response.status < 400,
       )
-      if (hostDescription.status >= 500)
-        throw new Error(
-          `${LOG_PREFIX}: host description probe returned ${hostDescription.status}.`,
-        )
-      const trusted = await httpGet(
-        '/api/host.describe',
+      const trusted = await httpRequest(
+        untrustedHostProbeRequest(),
         TRUSTED_HOST_PROBE_AUTHORITY,
       )
       if (trusted.status >= 400) {
@@ -578,8 +596,8 @@ class ZimaOsRawBuild {
           `${LOG_PREFIX}: configured browser authority returned ${trusted.status}.`,
         )
       }
-      const untrusted = await httpGet(
-        untrustedHostProbePath(),
+      const untrusted = await httpRequest(
+        untrustedHostProbeRequest(),
         'untrusted.invalid',
       )
       if (untrusted.status !== 403) {
@@ -908,7 +926,10 @@ export function assertElfX64(path: string, description: string): void {
   }
 }
 
-async function normalizeTreeTimestamps(root: string, epoch: number): Promise<void> {
+async function normalizeTreeTimestamps(
+  root: string,
+  epoch: number,
+): Promise<void> {
   const timestamp = new Date(epoch * 1000)
   const entries = await readdir(root, { withFileTypes: true })
   for (const entry of entries) {
@@ -991,15 +1012,28 @@ interface HttpResponse {
   readonly body: string
 }
 
-async function httpGet(path: string, host: string): Promise<HttpResponse> {
+async function httpRequest(
+  probe: HttpProbeRequest,
+  host: string,
+): Promise<HttpResponse> {
+  const body =
+    probe.body === undefined ? undefined : JSON.stringify(probe.body)
   return new Promise((resolvePromise, reject) => {
     const client = request(
       {
         hostname: '127.0.0.1',
         port: 3080,
-        path,
-        headers: { Host: host },
-        method: 'GET',
+        path: probe.path,
+        headers: {
+          Host: host,
+          ...(body === undefined
+            ? {}
+            : {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(body),
+            }),
+        },
+        method: probe.method,
       },
       (response) => {
         let body = ''
@@ -1014,32 +1048,44 @@ async function httpGet(path: string, host: string): Promise<HttpResponse> {
     )
     client.setTimeout(2_000, () => {
       client.destroy(
-        new Error(`${LOG_PREFIX}: HTTP request timed out for ${path}.`),
+        new Error(`${LOG_PREFIX}: HTTP request timed out for ${probe.path}.`),
       )
     })
     client.once('error', reject)
-    client.end()
+    client.end(body)
   })
 }
 
-async function waitForHttp(
-  path: string,
+/**
+ * Retry one runtime HTTP request until its response is accepted.
+ * @param probe - method, path, and optional JSON body sent on each attempt.
+ * @param host - Host authority sent while connecting to the loopback listener.
+ * @param accept - readiness predicate for one completed response.
+ * @param send - request implementation; tests may supply a deterministic transport.
+ * @returns the first accepted response.
+ */
+export async function waitForHttpRequest(
+  probe: HttpProbeRequest,
   host: string,
   accept: (response: HttpResponse) => boolean,
-): Promise<void> {
+  send: (
+    probe: HttpProbeRequest,
+    host: string,
+  ) => Promise<HttpResponse> = httpRequest,
+): Promise<HttpResponse> {
   const deadline = Date.now() + PROBE_TIMEOUT_MS
   let lastError: unknown
   while (Date.now() < deadline) {
     try {
-      const response = await httpGet(path, host)
-      if (accept(response)) return
+      const response = await send(probe, host)
+      if (accept(response)) return response
       lastError = new Error(`unexpected HTTP ${response.status}`)
     } catch (error) {
       lastError = error
     }
     await new Promise(resolveWait => setTimeout(resolveWait, 100))
   }
-  throw new Error(`${LOG_PREFIX}: HTTP probe timed out for ${path}.`, {
+  throw new Error(`${LOG_PREFIX}: HTTP probe timed out for ${probe.path}.`, {
     cause: lastError,
   })
 }

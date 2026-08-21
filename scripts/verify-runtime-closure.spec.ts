@@ -6,24 +6,42 @@ import { verifyRuntimeClosure } from './verify-runtime-closure.ts'
 
 const roots: string[] = []
 
-function fixture(files: Record<string, string | Record<string, unknown>>): string {
+function fixture(
+  files: Record<string, string | Record<string, unknown>>,
+): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-runtime-closure-'))
   roots.push(root)
   for (const [relative, value] of Object.entries(files)) {
     const path = join(root, relative)
     mkdirSync(dirname(path), { recursive: true })
-    writeFileSync(path, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`)
+    writeFileSync(
+      path,
+      typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`,
+    )
   }
   return root
 }
 
 const platforms = {
-  'linux-x64': { tag: 'manylinux_2_28_x86_64', executable: 'runtime-linux-x64' },
-  'linux-arm64': { tag: 'manylinux_2_28_aarch64', executable: 'runtime-linux-arm64' },
-  'macos-arm64': { tag: 'macosx_14_0_arm64', executable: 'runtime-macos-arm64' },
+  'linux-x64': {
+    tag: 'manylinux_2_28_x86_64',
+    executable: 'runtime-linux-x64',
+  },
+  'linux-arm64': {
+    tag: 'manylinux_2_28_aarch64',
+    executable: 'runtime-linux-arm64',
+  },
+  'macos-arm64': {
+    tag: 'macosx_14_0_arm64',
+    executable: 'runtime-macos-arm64',
+  },
 }
 
-function workspace(root: string, name: string, manifest: Record<string, unknown>): void {
+function workspace(
+  root: string,
+  name: string,
+  manifest: Record<string, unknown>,
+): void {
   const packageName = name.replace('@scope/', '')
   const path = join(root, 'packages/core', packageName, 'package.json')
   mkdirSync(dirname(path), { recursive: true })
@@ -31,13 +49,17 @@ function workspace(root: string, name: string, manifest: Record<string, unknown>
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true })
 })
 
 describe('verifyRuntimeClosure', () => {
   it('requires only plugins active for a Linux or macOS target', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/shared': 'workspace:^' } },
+      'python/sdk-runtime/package.json': {
+        name: 'runtime',
+        dependencies: { '@scope/shared': 'workspace:^' },
+      },
       'python/sdk-runtime/platforms.json': platforms,
       'apps/cli/config/agent-presets/standard/agent.cordis.yml': `
 - id: tools
@@ -84,7 +106,10 @@ describe('verifyRuntimeClosure', () => {
 
   it('does not interpret an ordinary plugin array config as nested Loader entries', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': 'workspace:^' } },
+      'python/sdk-runtime/package.json': {
+        name: 'runtime',
+        dependencies: { '@scope/plugin': 'workspace:^' },
+      },
       'python/sdk-runtime/platforms.json': platforms,
       'apps/cli/config/agent-presets/standard/agent.cordis.yml': `
 - id: plugin
@@ -101,7 +126,10 @@ describe('verifyRuntimeClosure', () => {
 
   it('requires preset plugins to be linked from the workspace', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/plugin': '1.2.3' } },
+      'python/sdk-runtime/package.json': {
+        name: 'runtime',
+        dependencies: { '@scope/plugin': '1.2.3' },
+      },
       'python/sdk-runtime/platforms.json': platforms,
       'apps/cli/config/agent-presets/standard/agent.cordis.yml': `
 - id: plugin
@@ -144,14 +172,75 @@ describe('verifyRuntimeClosure', () => {
     ])
   })
 
+  it('identifies a malformed deployment manifest', async () => {
+    const root = fixture({ 'runtime/package.json': '{' })
+
+    await expect(
+      verifyRuntimeClosure(root, 'runtime/package.json', {
+        checkPresetPlugins: false,
+      }),
+    ).rejects.toThrow(
+      `verify-runtime-closure: cannot parse JSON in ${join(root, 'runtime/package.json')}`,
+    )
+  })
+
+  it('accepts required peers supplied through the installed dependency closure', async () => {
+    const root = fixture({
+      'runtime/package.json': {
+        name: 'runtime',
+        dependencies: { '@scope/root': 'workspace:^' },
+      },
+    })
+    workspace(root, '@scope/root', {
+      dependencies: { '@scope/provider': 'workspace:^' },
+      peerDependencies: {
+        '@scope/provider': 'workspace:^',
+        '@scope/missing': 'workspace:^',
+      },
+    })
+    workspace(root, '@scope/provider', {})
+    workspace(root, '@scope/missing', {})
+
+    const missing = await verifyRuntimeClosure(root, 'runtime/package.json', {
+      checkPresetPlugins: false,
+      requireExplicitWorkspacePeers: false,
+    })
+    expect(missing.failures).toEqual([
+      'runtime -> @scope/root -> @scope/missing',
+    ])
+
+    workspace(root, '@scope/root', {
+      dependencies: {
+        '@scope/provider': 'workspace:^',
+        '@scope/missing': 'workspace:^',
+      },
+      peerDependencies: {
+        '@scope/provider': 'workspace:^',
+        '@scope/missing': 'workspace:^',
+      },
+    })
+    const closed = await verifyRuntimeClosure(root, 'runtime/package.json', {
+      checkPresetPlugins: false,
+      requireExplicitWorkspacePeers: false,
+    })
+    expect(closed.failures).toEqual([])
+    expect(closed.presetCount).toBe(0)
+  })
+
   it('retains the required workspace-peer closure check', async () => {
     const root = fixture({
-      'python/sdk-runtime/package.json': { name: 'runtime', dependencies: { '@scope/root': 'workspace:^' } },
+      'python/sdk-runtime/package.json': {
+        name: 'runtime',
+        dependencies: { '@scope/root': 'workspace:^' },
+      },
       'python/sdk-runtime/platforms.json': platforms,
       'apps/cli/config/agent-presets/minimal/agent.cordis.yml': '[]\n',
     })
     workspace(root, '@scope/root', {
-      peerDependencies: { '@scope/required': 'workspace:^', '@scope/optional': 'workspace:^' },
+      peerDependencies: {
+        '@scope/required': 'workspace:^',
+        '@scope/optional': 'workspace:^',
+      },
       peerDependenciesMeta: { '@scope/optional': { optional: true } },
     })
     workspace(root, '@scope/required', {})
@@ -160,6 +249,8 @@ describe('verifyRuntimeClosure', () => {
     const result = await verifyRuntimeClosure(root)
 
     expect(result.workspacePackageCount).toBe(1)
-    expect(result.failures).toEqual(['runtime -> @scope/root -> @scope/required'])
+    expect(result.failures).toEqual([
+      'runtime -> @scope/root -> @scope/required',
+    ])
   })
 })

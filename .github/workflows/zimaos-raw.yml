@@ -8,7 +8,7 @@ on:
     branches:
       - master
     tags:
-      - 'dsh-v*'
+      - "dsh-v*"
 
 concurrency:
   group: zimaos-raw-${{ startsWith(github.ref, 'refs/tags/dsh-v') && 'release' || github.ref }}
@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24
+          node-version: 24.19.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -21,8 +21,9 @@ import {
   normalizeWorkspaceDependencySpecifiers,
   parseNodeChecksum,
   squashFsArgs,
-  untrustedHostProbePath,
-  webProbePaths,
+  untrustedHostProbeRequest,
+  waitForHttpRequest,
+  webProbeRequests,
 } from './build-zimaos-raw.ts'
 
 const roots: string[] = []
@@ -55,12 +56,14 @@ describe('ZimaOS RAW assembly helpers', () => {
     header.writeUInt16LE(62, 18)
     writeFileSync(binary, header)
 
-    expect(() => { assertElfX64(binary, 'test native addon') }).not.toThrow()
+    expect(() => {
+      assertElfX64(binary, 'test native addon')
+    }).not.toThrow()
     header.writeUInt16LE(183, 18)
     writeFileSync(binary, header)
-    expect(() => { assertElfX64(binary, 'test native addon') }).toThrow(
-      /not a Linux x64 ELF binary/,
-    )
+    expect(() => {
+      assertElfX64(binary, 'test native addon')
+    }).toThrow(/not a Linux x64 ELF binary/)
   })
 
   it('extracts the exact Node.js archive checksum', () => {
@@ -194,10 +197,33 @@ describe('ZimaOS RAW assembly helpers', () => {
     ).rejects.toThrow(/contains the repo root/)
   })
 
-  it('probes the Web shell and protects the API route from untrusted hosts', () => {
-    expect(webProbePaths()).toEqual(['/', '/api/host.describe'])
-    expect(untrustedHostProbePath()).toBe('/api/host.describe')
-    expect(untrustedHostProbePath()).not.toBe('/')
+  it('probes the Web shell and protects a real API request from untrusted hosts', () => {
+    expect(webProbeRequests()).toEqual([
+      { path: '/', method: 'GET' },
+      {
+        path: '/api/host.describe',
+        method: 'POST',
+        body: {
+          type: 'client-request',
+          rpcId: 'zimaos-runtime-probe',
+          method: 'host.describe',
+          payload: {},
+        },
+      },
+    ])
+    expect(untrustedHostProbeRequest()).toEqual(webProbeRequests()[1])
+    expect(untrustedHostProbeRequest().path).not.toBe('/')
+  })
+
+  it('retries a real HTTP request until its acceptance condition is met', async () => {
+    let attempts = 0
+    await waitForHttpRequest(
+      { path: '/api/host.describe', method: 'POST', body: {} },
+      '127.0.0.1:3080',
+      response => response.status === 200,
+      async () => ({ status: ++attempts === 2 ? 200 : 404, body: '' }),
+    )
+    expect(attempts).toBe(2)
   })
 
   it('pins SquashFS ownership and creation time', () => {
