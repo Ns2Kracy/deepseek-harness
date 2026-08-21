@@ -1,0 +1,15 @@
+[Unit]
+Description=DeepSeek Harness
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=DSH_HOME=/var/lib/casaos/deepseek_harness
+EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env
+ExecStart=/usr/bin/deepseek-harness
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

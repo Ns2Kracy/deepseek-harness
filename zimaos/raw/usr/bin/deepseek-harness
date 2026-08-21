@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+state=/var/lib/casaos/deepseek_harness
+install -d -m 0700 "$state"
+export DSH_HOME="$state"
+
+exec /usr/lib/deepseek-harness/node/bin/node \
+  /usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js \
+  web --patch /usr/lib/deepseek-harness/zimaos.patch.yml \
+  --port 3080 --no-open
