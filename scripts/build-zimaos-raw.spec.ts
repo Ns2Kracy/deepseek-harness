@@ -248,10 +248,14 @@ function validStagedRoot(): string {
     ),
     'ID=_any\n',
   )
-  createFile(join(root, 'usr/bin/deepseek-harness'), '#!/bin/sh\n')
+  createFile(join(root, 'usr/bin/dsh'), '#!/bin/sh\n')
   createFile(
     join(root, 'usr/lib/systemd/system/deepseek-harness.service'),
-    ['[Service]', 'ExecStart=/usr/bin/deepseek-harness', ''].join('\n'),
+    [
+      '[Service]',
+      'ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open',
+      '',
+    ].join('\n'),
   )
   createFile(
     join(root, 'usr/share/casaos/www/modules/deepseek_harness/index.html'),

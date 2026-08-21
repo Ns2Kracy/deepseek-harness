@@ -40,6 +40,7 @@ const NODE_ARCHIVE = `node-${NODE_VERSION}-linux-x64.tar.xz`
 const NODE_BASE_URL = `https://nodejs.org/dist/${NODE_VERSION}`
 const MODULE_ID = 'deepseek_harness'
 const SERVICE_NAME = 'deepseek-harness'
+const DSH_BIN = 'dsh'
 const APP_ROOT = 'usr/lib/deepseek-harness/app'
 const NODE_ROOT = 'usr/lib/deepseek-harness/node'
 const DEFAULT_OUTPUT = `${MODULE_ID}.raw`
@@ -331,7 +332,7 @@ class ZimaOsRawBuild {
       return
     }
     await cp(source, destination, { recursive: true })
-    await chmod(stagedPath(this.rawRoot, `usr/bin/${SERVICE_NAME}`), 0o755)
+    await chmod(stagedPath(this.rawRoot, `usr/bin/${DSH_BIN}`), 0o755)
   }
 
   private async stageRuntimeClosure(): Promise<void> {
@@ -483,7 +484,7 @@ class ZimaOsRawBuild {
     assertPackageIdentity(this.rawRoot)
     assertRequiredServicePaths(this.rawRoot)
     const launcher = readFileSync(
-      stagedPath(this.rawRoot, `usr/bin/${SERVICE_NAME}`),
+      stagedPath(this.rawRoot, `usr/bin/${DSH_BIN}`),
       'utf8',
     )
     const overlay = readFileSync(
@@ -492,16 +493,16 @@ class ZimaOsRawBuild {
     )
     if (
       launcher.includes('--host 0.0.0.0') ||
+      launcher.includes('zimaos.patch.yml') ||
+      !launcher.includes('@deepseek-ai/dsh/lib/bin.js') ||
       !overlay.includes('host: 0.0.0.0')
     ) {
       throw new Error(
         `${LOG_PREFIX}: wildcard host must be selected only by the staged ZimaOS overlay.`,
       )
     }
-    if (!launcher.includes('/var/lib/casaos/deepseek_harness')) {
-      throw new Error(
-        `${LOG_PREFIX}: launcher state must remain outside the read-only /usr tree.`,
-      )
+    if (launcher.includes('DSH_HOME')) {
+      throw new Error(`${LOG_PREFIX}: dsh wrapper must only forward the official CLI.`)
     }
     const appRoot = stagedPath(this.rawRoot, APP_ROOT)
     assertNoSymlinks(appRoot)
@@ -537,7 +538,7 @@ class ZimaOsRawBuild {
     if (this.options.dryRun) {
       console.log(`${LOG_PREFIX}: [dry-run] ${node} ${cli} --version`)
       console.log(
-        `${LOG_PREFIX}: [dry-run] launch staged /usr/bin/${SERVICE_NAME} --staged-root ${this.rawRoot} with temporary DSH_HOME`,
+        `${LOG_PREFIX}: [dry-run] DSH_ZIMAOS_STAGED_ROOT=${this.rawRoot} DSH_ZIMAOS_TRUSTED_HOST=${TRUSTED_HOST_PROBE_AUTHORITY} /usr/bin/${DSH_BIN} web --patch ${stagedPath(this.rawRoot, 'usr/lib/deepseek-harness/zimaos.patch.yml')} --no-open with temporary DSH_HOME`,
       )
       for (const probe of webProbeRequests())
         console.log(
@@ -555,17 +556,30 @@ class ZimaOsRawBuild {
     }
     await this.runCommand('CLI version probe', node, [cli, '--version'])
     const home = await mkdtemp(join(tmpdir(), 'dsh-zimaos-home-'))
-    const launcher = stagedPath(this.rawRoot, `usr/bin/${SERVICE_NAME}`)
-    const child = spawn(launcher, ['--staged-root', this.rawRoot], {
-      cwd: stagedPath(this.rawRoot, APP_ROOT),
-      env: {
-        ...buildSubprocessEnvironment(process.env),
-        DSH_HOME: home,
-        DSH_TELEMETRY_DISABLED: '1',
-        DSH_ZIMAOS_TRUSTED_HOST: TRUSTED_HOST_PROBE_AUTHORITY,
+    const launcher = stagedPath(this.rawRoot, `usr/bin/${DSH_BIN}`)
+    const child = spawn(
+      launcher,
+      [
+        'web',
+        '--patch',
+        stagedPath(
+          this.rawRoot,
+          'usr/lib/deepseek-harness/zimaos.patch.yml',
+        ),
+        '--no-open',
+      ],
+      {
+        cwd: stagedPath(this.rawRoot, APP_ROOT),
+        env: {
+          ...buildSubprocessEnvironment(process.env),
+          DSH_HOME: home,
+          DSH_TELEMETRY_DISABLED: '1',
+          DSH_ZIMAOS_STAGED_ROOT: this.rawRoot,
+          DSH_ZIMAOS_TRUSTED_HOST: TRUSTED_HOST_PROBE_AUTHORITY,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    )
     let output = ''
     child.stdout.on('data', (chunk: Buffer) => {
       output += chunk.toString()
@@ -897,7 +911,7 @@ function requiredAppPaths(): readonly string[] {
 
 function mandatoryImagePaths(): readonly string[] {
   return [
-    `usr/bin/${SERVICE_NAME}`,
+    `usr/bin/${DSH_BIN}`,
     `usr/lib/systemd/system/${SERVICE_NAME}.service`,
     `usr/share/casaos/modules/${MODULE_ID}.json`,
     `${NODE_ROOT}/bin/node`,

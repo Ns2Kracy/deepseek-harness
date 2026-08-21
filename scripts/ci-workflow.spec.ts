@@ -400,16 +400,22 @@ describe('Python release workflows', () => {
 })
 
 describe('ZimaOS RAW workflow', () => {
-  it('builds every change and serializes the rolling latest release', () => {
+  it('publishes direct preview assets and serializes the rolling latest release', () => {
     const workflow = loadWorkflow('.github/workflows/zimaos-raw.yml')
     const pullRequest = workflowEvent(workflow, 'pull_request')
     const push = workflowEvent(workflow, 'push')
     const build = workflowJob(workflow, 'build')
+    const preview = workflowJob(workflow, 'publish-preview')
     const publish = workflowJob(workflow, 'publish-latest')
-    if (!Array.isArray(build.steps) || !Array.isArray(publish.steps)) {
+    if (
+      !Array.isArray(build.steps) ||
+      !Array.isArray(preview.steps) ||
+      !Array.isArray(publish.steps)
+    ) {
       throw new TypeError('ZimaOS RAW jobs must define steps')
     }
     const buildSteps: unknown[] = build.steps
+    const previewSteps: unknown[] = preview.steps
     const publishSteps: unknown[] = publish.steps
 
     expect(pullRequest).toEqual({})
@@ -421,6 +427,12 @@ describe('ZimaOS RAW workflow', () => {
     })
     expect(build['runs-on']).toBe('ubuntu-24.04')
     expect(build.permissions).toEqual({ contents: 'read' })
+    expect(preview).toMatchObject({
+      if: "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'",
+      needs: 'build',
+      permissions: { contents: 'write' },
+      concurrency: { group: 'zimaos-raw-preview', 'cancel-in-progress': false },
+    })
     expect(publish.permissions).toEqual({ contents: 'write' })
     expect(publish.if).toBe("startsWith(github.ref, 'refs/tags/dsh-v')")
     expect(publish.needs).toBe('build')
@@ -460,6 +472,36 @@ describe('ZimaOS RAW workflow', () => {
     )
     expect(buildJson).toContain('deepseek_harness.raw.sha256')
 
+    const previewScript = previewSteps
+      .filter(
+        (step): step is Record<string, unknown> & { run: string } =>
+          isRecord(step) && typeof step.run === 'string',
+      )
+      .map(step => step.run)
+      .join('\n')
+    expect(previewScript).toContain('sha256sum -c deepseek_harness.raw.sha256')
+    expect(previewScript).toContain(
+      'gh release upload zimaos-raw-preview deepseek_harness.raw deepseek_harness.raw.sha256 --clobber',
+    )
+    expect(previewScript).toContain(
+      '--force-with-lease="$preview_ref:$observed_oid"',
+    )
+    expect(previewScript).not.toContain('git push origin "$preview_ref" --force')
+    expect(previewScript).toContain('Refusing to create zimaos-raw-preview')
+    expect(previewScript).toContain('Refusing to update zimaos-raw-preview')
+    expect(previewScript).toContain('-F draft=true -F prerelease=true')
+    expect(previewScript).toContain(
+      '-F draft=false -F prerelease=true -f make_latest=false',
+    )
+    expect(previewScript).toContain(
+      '["deepseek_harness.raw", "deepseek_harness.raw.sha256"]',
+    )
+    expect(
+      previewScript.indexOf('gh release upload zimaos-raw-preview'),
+    ).toBeGreaterThan(
+      previewScript.indexOf('sha256sum -c deepseek_harness.raw.sha256'),
+    )
+
     const releaseScript = publishSteps
       .filter(
         (step): step is Record<string, unknown> & { run: string } =>
@@ -468,7 +510,10 @@ describe('ZimaOS RAW workflow', () => {
       .map(step => step.run)
       .join('\n')
     expect(releaseScript).toContain('git tag -f latest')
-    expect(releaseScript).toContain('git push origin refs/tags/latest --force')
+    expect(releaseScript).toContain(
+      '--force-with-lease="$latest_ref:$observed_oid"',
+    )
+    expect(releaseScript).not.toContain('refs/tags/latest --force')
     expect(releaseScript).toContain(
       "git tag --list 'dsh-v*' --sort=-v:refname",
     )
@@ -485,10 +530,10 @@ describe('ZimaOS RAW workflow', () => {
       '[\"deepseek_harness.raw\", \"deepseek_harness.raw.sha256\"]',
     )
     expect(
-      releaseScript.indexOf('git push origin refs/tags/latest --force'),
+      releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
     ).toBeGreaterThan(releaseScript.indexOf('gh release upload latest'))
     expect(
-      releaseScript.indexOf('git push origin refs/tags/latest --force'),
+      releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
     ).toBeGreaterThan(releaseScript.indexOf('.isDraft == true'))
     expect(releaseScript).not.toContain('--prerelease')
     expect(releaseScript).not.toContain('--draft')

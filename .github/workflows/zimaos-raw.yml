@@ -59,6 +59,77 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  publish-preview:
+    name: Publish rolling preview release
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: zimaos-raw-preview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download verified RAW artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: zimaos-raw-${{ github.sha }}
+
+      - name: Verify downloaded RAW checksum
+        run: sha256sum -c deepseek_harness.raw.sha256
+
+      - name: Stage and publish preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          preview_ref=refs/tags/zimaos-raw-preview
+          observed_oid="$(git ls-remote --tags origin "$preview_ref" | awk '{print $1}')"
+          if gh release view zimaos-raw-preview >/dev/null 2>&1; then
+            if [[ -z "$observed_oid" ]]; then
+              echo 'Refusing to update zimaos-raw-preview because its Release exists without its tag.' >&2
+              exit 1
+            fi
+            release_id="$(gh release view zimaos-raw-preview --json databaseId --jq .databaseId)"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=true -F prerelease=true >/dev/null
+          else
+            if [[ -n "$observed_oid" ]]; then
+              echo 'Refusing to create zimaos-raw-preview because its tag already exists without a Release.' >&2
+              exit 1
+            fi
+            git tag zimaos-raw-preview "$GITHUB_SHA"
+            gh auth setup-git
+            git push origin "$preview_ref"
+            observed_oid="$GITHUB_SHA"
+            release_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name=zimaos-raw-preview -f target_commitish="$GITHUB_SHA" \
+              -f name='DeepSeek Harness ZimaOS RAW (preview)' \
+              -f body='Rolling Linux amd64 ZimaOS RAW build from the latest same-repository pull request. Preview builds may be replaced without notice.' \
+              -F draft=true -F prerelease=true --jq .id)"
+          fi
+
+          gh release upload zimaos-raw-preview deepseek_harness.raw deepseek_harness.raw.sha256 --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            | jq -e '.draft == true and .prerelease == true and .tag_name == "zimaos-raw-preview"
+              and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
+
+          git tag -f zimaos-raw-preview "$GITHUB_SHA"
+          gh auth setup-git
+          git push origin "$preview_ref" \
+            --force-with-lease="$preview_ref:$observed_oid"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+          gh release view zimaos-raw-preview --json isDraft,isPrerelease,tagName,assets \
+            | jq -e '.isDraft == false and .isPrerelease == true and .tagName == "zimaos-raw-preview"
+              and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
+
   publish-latest:
     name: Publish rolling latest release
     if: startsWith(github.ref, 'refs/tags/dsh-v')
@@ -86,6 +157,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          latest_ref=refs/tags/latest
+          observed_oid="$(git ls-remote --tags origin "$latest_ref" | awk '{print $1}')"
           newest_tag="$(git tag --list 'dsh-v*' --sort=-v:refname | head -n1)"
           if [[ "$GITHUB_REF_NAME" != "$newest_tag" ]]; then
             echo "Refusing to move latest backwards from $newest_tag to $GITHUB_REF_NAME." >&2
@@ -111,7 +184,12 @@ jobs:
 
           git tag -f latest "$GITHUB_SHA"
           gh auth setup-git
-          git push origin refs/tags/latest --force
+          if [[ -n "$observed_oid" ]]; then
+            git push origin "$latest_ref" \
+              --force-with-lease="$latest_ref:$observed_oid"
+          else
+            git push origin "$latest_ref"
+          fi
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
             -F draft=false -F prerelease=false -f make_latest=true >/dev/null
           gh release edit latest --latest

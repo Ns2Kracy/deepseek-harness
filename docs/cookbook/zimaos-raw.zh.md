@@ -6,12 +6,14 @@
 
 ## 前提条件
 
-你需要一台可通过 SSH 访问的 Linux amd64 ZimaOS 设备、root 权限，以及一个限制 TCP 3080 端口访问范围的可信局域网或防火墙规则。你可以在干净的 DeepSeek Harness checkout 中使用 Node.js 24、pnpm 11、`squashfs-tools` 与 `xz-utils` 构建，也可以从滚动更新的 [`latest` Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/latest) 下载以下两个文件：
+你需要一台可通过 SSH 访问的 Linux amd64 ZimaOS 设备、root 权限，以及一个限制 TCP 3080 端口访问范围的可信局域网或防火墙规则。你可以在干净的 DeepSeek Harness checkout 中使用 Node.js 24、pnpm 11、`musl-tools`、`squashfs-tools` 与 `xz-utils` 构建，也可以从滚动更新的 [`latest` Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/latest) 下载以下两个文件：
 
 ```text
 deepseek_harness.raw
 deepseek_harness.raw.sha256
 ```
+
+[`zimaos-raw-preview` 预发布版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/zimaos-raw-preview) 会直接提供最新一次同仓库 PR（Pull Request）成功构建的相同两个文件。预览文件可能随时被覆盖；需要带标签的构建时请使用 `latest`。
 
 > [!WARNING] 3080 端口会暴露 Harness UI 及其 shell、文件系统、凭据与 agent 能力。本软件包不增加 CasaOS Gateway 路由或认证层。在安装启动服务之前，请将设备放在可信局域网内，或用防火墙阻止不可信来源访问 3080 端口。只有防火墙同时将 3080 端口的直连来源限制为该反向代理或本机时，带认证的反向代理才不会被绕过。
 
@@ -42,7 +44,9 @@ scp deepseek_harness.raw root@ZIMAOS_IP:/var/lib/extensions/
 ssh root@ZIMAOS_IP 'zpkg install /var/lib/extensions/deepseek_harness.raw'
 ```
 
-确认 ZimaOS 已注册软件包并启动服务：
+确认 ZimaOS 已注册软件包并启动服务。镜像也会暴露官方 CLI 入口，因此 SSH 用户可以直接运行 `dsh web` 及其他 `dsh` 命令；服务使用附加 ZimaOS 网络 overlay 与 `--no-open` 的 `dsh web`。
+
+验证安装：
 
 ```bash
 ssh root@ZIMAOS_IP 'zpkg list'
@@ -79,7 +83,7 @@ DSH_ZIMAOS_TRUSTED_HOST=harness.home.example
 curl --fail http://ZIMAOS_IP:3080/
 ```
 
-在浏览器中打开 `http://ZIMAOS_IP:3080/`。CasaOS 模块入口会打开同一地址，并保留访问 CasaOS 时使用的主机名。
+在浏览器中打开 `http://ZIMAOS_IP:3080/`。CasaOS 模块入口会打开同一地址，并保留访问 CasaOS 时使用的主机名。即使浏览器未提供仅限安全上下文的 `crypto.randomUUID()`，Web 客户端也支持这个普通 HTTP 局域网来源。
 
 如果任一请求失败，请检查服务状态与近期日志：
 

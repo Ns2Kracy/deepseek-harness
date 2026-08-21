@@ -7,7 +7,8 @@ After=network-online.target
 Type=simple
 Environment=DSH_HOME=/var/lib/casaos/deepseek_harness
 EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env
-ExecStart=/usr/bin/deepseek-harness
+ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/casaos/deepseek_harness
+ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open
 Restart=on-failure
 RestartSec=5s
 

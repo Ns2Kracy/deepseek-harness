@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { verifyRuntimeClosure } from './verify-runtime-closure.ts'
 
 const rawRoot = resolve(import.meta.dirname, '../zimaos/raw')
-const launcherPath = 'usr/bin/deepseek-harness'
+const launcherPath = 'usr/bin/dsh'
 const overlayPath = 'usr/lib/deepseek-harness/zimaos.patch.yml'
 const extensionReleasePath = 'usr/lib/extension-release.d/extension-release.deepseek_harness'
 const servicePath = 'usr/lib/systemd/system/deepseek-harness.service'
@@ -48,7 +48,9 @@ describe('ZimaOS RAW source layout', () => {
     expect(module.ui.name).toBe('deepseek_harness')
     expect(module.ui.entry).toBe('/modules/deepseek_harness/index.html')
     expect(module.ui.icon).toBe('/modules/deepseek_harness/appicon.svg')
-    expect(service).toContain('ExecStart=/usr/bin/deepseek-harness')
+    expect(service).toContain(
+      'ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open',
+    )
     expect(service).toContain('Environment=DSH_HOME=/var/lib/casaos/deepseek_harness')
     expect(service).toContain('EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env')
     expect(service).toContain('After=network-online.target')
@@ -61,18 +63,25 @@ describe('ZimaOS RAW source layout', () => {
     const overlay = await fixture(overlayPath)
 
     expect(launcher.startsWith('#!/bin/sh\n')).toBe(true)
-    expect(launcher).toContain('state=${DSH_HOME:-/var/lib/casaos/deepseek_harness}')
-    expect(launcher).toContain('install -d -m 0700 "$state"')
-    expect(launcher).toContain('= "--staged-root" ]')
-    expect(launcher).toContain('exec "$root/usr/lib/deepseek-harness/node/bin/node"')
-    expect(launcher).toContain('"$root/usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js"')
-    expect(launcher).toContain('set -- web --patch "$root/usr/lib/deepseek-harness/zimaos.patch.yml" --port 3080 --no-open')
-    expect(launcher).toContain('set -- "$@" --trusted-host "$DSH_ZIMAOS_TRUSTED_HOST"')
+    expect(launcher).toContain('root=${DSH_ZIMAOS_STAGED_ROOT:-}')
+    expect(launcher).toContain(
+      'exec "$root/usr/lib/deepseek-harness/node/bin/node"',
+    )
+    expect(launcher).toContain(
+      '"$root/usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js"',
+    )
     expect(launcher).toContain('"$@"')
+    expect(launcher).not.toContain('DSH_HOME')
+    expect(launcher).not.toContain('zimaos.patch.yml')
+    expect(launcher).not.toContain('--no-open')
     expect(launcher).not.toContain('--host 0.0.0.0')
     expect(overlay).toContain('- id: webserver')
     expect(overlay).toContain('host: 0.0.0.0')
     expect(overlay).toContain('port: !!js ctx.webStartup.port ?? 3080')
+    expect(overlay).toContain('- id: web-runtime')
+    expect(overlay).toContain('openBrowser: !!js ctx.webStartup.openBrowser')
+    expect(overlay).toContain('DSH_ZIMAOS_TRUSTED_HOST')
+    expect(overlay).toContain('...ctx.webStartup.trustedHosts')
   })
 
   it('provides a no-cache launcher page and SVG icon', async () => {

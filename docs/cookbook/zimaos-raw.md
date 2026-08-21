@@ -6,12 +6,14 @@ This tutorial installs the self-contained Linux amd64 `deepseek_harness.raw` ext
 
 ## Prerequisites
 
-You need a Linux amd64 ZimaOS device reachable over SSH, root access, and a trusted LAN or firewall rule that limits TCP port 3080. Build from a clean DeepSeek Harness checkout with Node.js 24, pnpm 11, `squashfs-tools`, and `xz-utils`, or download both files from the rolling [`latest` Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/latest):
+You need a Linux amd64 ZimaOS device reachable over SSH, root access, and a trusted LAN or firewall rule that limits TCP port 3080. Build from a clean DeepSeek Harness checkout with Node.js 24, pnpm 11, `musl-tools`, `squashfs-tools`, and `xz-utils`, or download both files from the rolling [`latest` Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/latest):
 
 ```text
 deepseek_harness.raw
 deepseek_harness.raw.sha256
 ```
+
+The [`zimaos-raw-preview` prerelease](https://github.com/deepseek-ai/deepseek-harness/releases/tag/zimaos-raw-preview) exposes the same two files directly from the latest successful same-repository pull-request build. Preview files can change without notice; use `latest` for a tagged build.
 
 > [!WARNING] Port 3080 exposes the Harness UI and its shell, filesystem, credential, and agent capabilities. This package adds no CasaOS Gateway route or authentication layer. Before installation starts the service, place the device on a trusted LAN or block untrusted access to port 3080 with a firewall. An authenticated reverse proxy is safe only when the firewall also permits direct port 3080 access solely from that proxy or the local host.
 
@@ -42,7 +44,9 @@ scp deepseek_harness.raw root@ZIMAOS_IP:/var/lib/extensions/
 ssh root@ZIMAOS_IP 'zpkg install /var/lib/extensions/deepseek_harness.raw'
 ```
 
-Confirm that ZimaOS registered the package and started its service:
+Confirm that ZimaOS registered the package and started its service. The image also exposes the official CLI entry, so SSH users can run `dsh web` and other `dsh` commands directly; the service uses `dsh web` with the ZimaOS network overlay and `--no-open`.
+
+Verify the installation:
 
 ```bash
 ssh root@ZIMAOS_IP 'zpkg list'
@@ -79,7 +83,7 @@ From a machine on the permitted network:
 curl --fail http://ZIMAOS_IP:3080/
 ```
 
-Open `http://ZIMAOS_IP:3080/` in a browser. The CasaOS module tile opens the same address while preserving the hostname used for CasaOS.
+Open `http://ZIMAOS_IP:3080/` in a browser. The CasaOS module tile opens the same address while preserving the hostname used for CasaOS. The Web client supports this plain-HTTP LAN origin even when the browser omits secure-context-only `crypto.randomUUID()`.
 
 Check service status and recent logs if either request fails:
 
