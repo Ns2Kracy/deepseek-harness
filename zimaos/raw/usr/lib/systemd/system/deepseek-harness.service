@@ -13,7 +13,7 @@ ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/media/ZimaOS-HD
+ReadWritePaths=/media /DATA/.dsh
 Restart=on-failure
 RestartSec=5s
 
