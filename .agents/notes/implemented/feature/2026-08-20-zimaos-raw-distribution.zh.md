@@ -18,7 +18,7 @@ CasaOS 模块宿主与 `dsh web` 不同源。浏览器客户端使用同源的 `
 
 镜像内置 Linux x64 的 Node.js `v24.19.0`。`scripts/build-zimaos-raw.ts` 下载归档和官方 `SHASUMS256.txt`，验证对应归档的精确 digest，并且只缓存以 digest 为键且已经验证的归档。`zimaos/runtime/package.json` 独立于 Python SDK runtime，拥有 Web 生产闭包，并显式安装关闭 pnpm 自动 peer 安装后会被省略的必需 workspace peer provider。共享 runtime-closure verifier 会遍历 app、package 与 vendored manifest，并拒绝完整 ZimaOS dependency graph 中缺失的必需 peer。组装器以仓库 lockfile 运行 pnpm legacy deploy，并遵守 `pnpm-workspace.yaml` 中按软件包审查的 `allowBuilds`；构建子进程会删除名称表示凭据的环境变量。组装器实体化链接，补入 deploy 遗漏的 vendored `cosmokit` 与 `schemastery` runtime 包，删除开发依赖元数据，并以原子替换方式重写剩余 workspace range，避免 pnpm hardlink 修改源码 manifest。静态验证会拒绝应用目录中的符号链接、暂存闭包中缺失的必需生产依赖、残留的 `workspace:` range、缺失的动态资源，以及 ELF machine 不是 Linux x64 的原生产物。Landlock 软件包 verifier 还会拒绝占位文件与未声明二进制。
 
-RAW 将 `/usr/bin/dsh` 暴露为内置 Node.js 与官方 CLI 的透明包装，因此交互命令使用正常入口，包括 `dsh web`。systemd 服务设置 `DSH_HOME=/var/lib/casaos/deepseek_harness`，读取可选的 `/var/lib/casaos/deepseek_harness/.env`，创建这个可写 home，并运行只附加 ZimaOS overlay 与 `--no-open` 的 `dsh web`。组装器通过 `DSH_ZIMAOS_STAGED_ROOT` 让同一个包装器指向暂存根目录，以供 Linux CI 探测。overlay 完整重述 `webserver` 行以选择 `host: 0.0.0.0`，完整重述 connection 行，在保留 `webRuntime.trustedHosts` 的同时启用显式的 `allowRemoteManagement`，并完整重述 `web-runtime` 行以附加可选的 `DSH_ZIMAOS_TRUSTED_HOST`；公共 CLI 仍拒绝 `--host 0.0.0.0`。
+RAW 将 `/usr/bin/dsh` 暴露为内置 Node.js 与官方 CLI 的透明包装，因此交互命令使用正常入口，包括 `dsh web`。systemd 服务设置 `HOME=/media/ZimaOS-HD`，读取可选的 `/media/ZimaOS-HD/.dsh/.env`，并运行只附加 ZimaOS overlay 与 `--no-open` 的 `dsh web`。`ProtectSystem=full` 将 `/usr`、`/boot` 与 `/etc` 保持为只读，同时允许写入 `/media` 等 ZimaOS 数据挂载；`PrivateTmp=true` 提供隔离的临时存储。组装器通过 `DSH_ZIMAOS_STAGED_ROOT` 让同一个包装器指向暂存根目录，以供 Linux CI 探测。overlay 完整重述 `webserver` 行以选择 `host: 0.0.0.0`，完整重述 connection 行，在保留 `webRuntime.trustedHosts` 的同时启用显式的 `allowRemoteManagement`，并完整重述 `web-runtime` 行以附加可选的 `DSH_ZIMAOS_TRUSTED_HOST`；公共 CLI 仍拒绝 `--host 0.0.0.0`。
 
 该服务不注册 CasaOS Gateway 路由，也不依赖 CasaOS message bus。CasaOS 模块提供禁用缓存的启动页，保留当前主机名并导航到 `http://<host>:3080/`。完整前端仍由 `dsh web` 提供，从而保持 `/api` 请求与 WebSocket upgrade 同源。connection Host 会把对应的管理能力注入启动 HTML，因此远程 Client settings scope 使用 Host 存储，而不是不可用的 memory 模式。在任何 Client 插件激活之前，如果 HTTP 局域网来源不提供 `crypto.randomUUID()`，Web 启动入口会通过 `crypto.getRandomValues()` 提供 UUID v4 生成能力。
 
@@ -44,4 +44,4 @@ RAW 将 `/usr/bin/dsh` 暴露为内置 Node.js 与官方 CLI 的透明包装，�
 
 内置 Node.js 与原生依赖树会增加镜像体积，并可能依赖 ZimaOS 的 glibc 与内核基线。CI 启动探测可以验证 Linux amd64 行为，但不能替代在真实 ZimaOS 设备上的安装。Mod Store 发布与实机验收仍是独立的后续工作；本地组装器不声称这些表面已经存在。
 
-RAW 挂载为只读。任何尝试写入安装文件旁边的插件或依赖都会失败；相应状态必须移动到 `/var/lib/casaos/deepseek_harness`，而不是削弱扩展目录布局。
+RAW 挂载为只读。任何尝试写入安装文件旁边的插件或依赖都会失败；可变状态应位于 `/media` 下，默认 Harness home 为 `/media/ZimaOS-HD/.dsh`。

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-zimaos-raw-distribution.md
-2026-08-20-zimaos-raw-distribution.md: faa64fb8938abe558cb3755df0b6fd1948fe07c4
-2026-08-20-zimaos-raw-distribution.zh.md: 82b60776fe73cf614f3babc76c9082c654fafa26
+2026-08-20-zimaos-raw-distribution.md: ba9a8d02005f825791e1995bcfb4648ff8116186
+2026-08-20-zimaos-raw-distribution.zh.md: 61e00420ee3e2b828a49aaca54a5e03ef5971787

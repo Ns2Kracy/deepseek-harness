@@ -57,13 +57,13 @@ ssh root@ZIMAOS_IP 'systemctl is-active deepseek-harness.service'
 
 ## 3. 配置凭据与主机访问
 
-`/usr` 下的扩展挂载是只读的。将配置与运行状态存放在 `/var/lib/casaos/deepseek_harness`；服务会在启动时读取其中可选的 `.env` 文件。
+`/usr` 下的扩展挂载是只读的。服务默认将配置与运行状态存放在 `/media/ZimaOS-HD/.dsh`，并在启动时读取其中可选的 `.env` 文件。
 
 Web UI 可以直接配置 provider 与凭据，无需 SSH。以下可选文件仍适合预配或由环境持有的凭据；创建该文件并将权限限制为仅属主可读写：
 
 ```bash
-ssh root@ZIMAOS_IP 'install -d -m 0700 /var/lib/casaos/deepseek_harness && install -m 0600 /dev/null /var/lib/casaos/deepseek_harness/.env'
-ssh root@ZIMAOS_IP 'printf "%s\n" "DEEPSEEK_API_KEY=replace-me" > /var/lib/casaos/deepseek_harness/.env'
+ssh root@ZIMAOS_IP 'install -d -m 0700 /media/ZimaOS-HD/.dsh && install -m 0600 /dev/null /media/ZimaOS-HD/.dsh/.env'
+ssh root@ZIMAOS_IP 'printf "%s\n" "DEEPSEEK_API_KEY=replace-me" > /media/ZimaOS-HD/.dsh/.env'
 ssh root@ZIMAOS_IP 'systemctl restart deepseek-harness.service'
 ```
 
@@ -103,7 +103,7 @@ ssh root@ZIMAOS_IP 'zpkg list'
 ssh root@ZIMAOS_IP 'zpkg list-remote'
 ```
 
-校验新的 RAW 后，按照步骤 2 将其传给 `zpkg install`。`/var/lib/casaos/deepseek_harness` 下的状态独立于只读镜像。移除扩展：
+校验新的 RAW 后，按照步骤 2 将其传给 `zpkg install`。`/media/ZimaOS-HD/.dsh` 下的状态独立于只读镜像。移除扩展：
 
 ```bash
 ssh root@ZIMAOS_IP 'zpkg remove deepseek_harness'

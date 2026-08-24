@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/zimaos-raw.md
-zimaos-raw.md: d228ebd29e661f390bab308b0d3b8f5556fd4f91
-zimaos-raw.zh.md: 63bead4051bfcaa4250e2f821aad6cd73cfe6e98
+zimaos-raw.md: 7eba37e24a9a9e7f3c00d1eeb75ad880dd4402a5
+zimaos-raw.zh.md: 189e8634543b8707886d4be877f92a039feda7e2

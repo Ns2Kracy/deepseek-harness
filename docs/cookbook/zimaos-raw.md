@@ -57,13 +57,13 @@ The second command must print `active`.
 
 ## 3. Configure credentials and host access
 
-The extension mount below `/usr` is read-only. Store configuration and runtime state in `/var/lib/casaos/deepseek_harness`; the service reads its optional `.env` file at startup.
+The extension mount below `/usr` is read-only. The service stores configuration and runtime state in `/media/ZimaOS-HD/.dsh` by default and reads its optional `.env` file at startup.
 
 The Web UI can configure providers and credentials directly without SSH. The optional file path below remains useful for provisioning or environment-owned credentials; create it with owner-only permissions:
 
 ```bash
-ssh root@ZIMAOS_IP 'install -d -m 0700 /var/lib/casaos/deepseek_harness && install -m 0600 /dev/null /var/lib/casaos/deepseek_harness/.env'
-ssh root@ZIMAOS_IP 'printf "%s\n" "DEEPSEEK_API_KEY=replace-me" > /var/lib/casaos/deepseek_harness/.env'
+ssh root@ZIMAOS_IP 'install -d -m 0700 /media/ZimaOS-HD/.dsh && install -m 0600 /dev/null /media/ZimaOS-HD/.dsh/.env'
+ssh root@ZIMAOS_IP 'printf "%s\n" "DEEPSEEK_API_KEY=replace-me" > /media/ZimaOS-HD/.dsh/.env'
 ssh root@ZIMAOS_IP 'systemctl restart deepseek-harness.service'
 ```
 
@@ -103,7 +103,7 @@ ssh root@ZIMAOS_IP 'zpkg list'
 ssh root@ZIMAOS_IP 'zpkg list-remote'
 ```
 
-Verify a new RAW and pass it to `zpkg install` as in step 2. State under `/var/lib/casaos/deepseek_harness` remains outside the read-only image. To remove the extension:
+Verify a new RAW and pass it to `zpkg install` as in step 2. State under `/media/ZimaOS-HD/.dsh` remains outside the read-only image. To remove the extension:
 
 ```bash
 ssh root@ZIMAOS_IP 'zpkg remove deepseek_harness'

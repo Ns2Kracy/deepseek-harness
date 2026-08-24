@@ -8,12 +8,10 @@ Type=simple
 Environment=HOME=/media/ZimaOS-HD
 EnvironmentFile=-/media/ZimaOS-HD/.dsh/.env
 WorkingDirectory=/media/ZimaOS-HD
-ExecStartPre=/usr/bin/install -d -m 0700 /media/ZimaOS-HD/.dsh
 ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/media /DATA/.dsh
 Restart=on-failure
 RestartSec=5s
 

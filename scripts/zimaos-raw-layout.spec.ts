@@ -58,10 +58,11 @@ describe('ZimaOS RAW source layout', () => {
       'EnvironmentFile=-/media/ZimaOS-HD/.dsh/.env',
     )
     expect(service).toContain('WorkingDirectory=/media/ZimaOS-HD')
-    expect(service).toContain('ProtectSystem=strict')
+    expect(service).toContain('ProtectSystem=full')
     expect(service).toContain('ProtectHome=true')
     expect(service).toContain('PrivateTmp=true')
-    expect(service).toContain('ReadWritePaths=/media /DATA/.dsh')
+    expect(service).not.toContain('ReadWritePaths=')
+    expect(service).not.toContain('ExecStartPre=')
     expect(service).toContain('After=network-online.target')
     expect(service).toContain('Wants=network-online.target')
     expect(service).toContain('Restart=on-failure')
