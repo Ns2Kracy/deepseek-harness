@@ -23,13 +23,24 @@ import { SettingsScopeBinder } from './settings-scope.ts'
 import { SettingsDescribeMirror } from './settings-mirror.ts'
 
 export type {
-  SettingsGeneralItemOwnerProps, SettingsHeaderOwnerProps, SettingsOnboardingOwnerProps,
-  SettingsPluginsTabOwnerProps, SettingsSectionOwnerProps, SettingsTriggerOwnerProps,
+  SettingsGeneralItemOwnerProps,
+  SettingsHeaderOwnerProps,
+  SettingsOnboardingOwnerProps,
+  SettingsPluginsTabOwnerProps,
+  SettingsSectionOwnerProps,
+  SettingsTriggerOwnerProps,
 } from './contract/slots.ts'
-export type { SettingsScopeController, SettingsScopeBinder } from './settings-scope.ts'
+export type {
+  SettingsScopeController,
+  SettingsScopeBinder,
+} from './settings-scope.ts'
 export type { SettingsSchemaService } from './schema.ts'
 export type { SchemaNode } from './schema.ts'
-export type { SettingsDescribeFace, SettingsDescribeView, SettingsMirrorSnapshot } from './settings-mirror.ts'
+export type {
+  SettingsDescribeFace,
+  SettingsDescribeView,
+  SettingsMirrorSnapshot,
+} from './settings-mirror.ts'
 
 /**
  * Required services: the wire handle for the mirror's reads and the forwarded
@@ -51,19 +62,28 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const mirror = new SettingsDescribeMirror(
     connection.api,
-    connection.isLoopback ? 'host' : 'memory',
+    connection.canManageHost ? 'host' : 'memory',
   )
   ctx.effect(() => {
     const disposers = [
-      (ctx.get('remote') as ClientContext['remote']).$on('settings/document-updated', () => { void mirror.load() }),
-      ctx.on('connection/reset', () => { void mirror.load() }),
+      (ctx.get('remote') as ClientContext['remote']).$on(
+        'settings/document-updated',
+        () => {
+          void mirror.load()
+        },
+      ),
+      ctx.on('connection/reset', () => {
+        void mirror.load()
+      }),
     ]
     // The first connection also emits connection/reset, so startup normally
     // costs two reads (budgeted in startup-rpc-budget.e2e.ts). The in-flight
     // fold does not merge them into one; it guarantees at most one pending
     // read at a time and that no invalidation arriving mid-read is lost.
     void mirror.ensure()
-    return () => { for (const dispose of disposers) dispose() }
+    return () => {
+      for (const dispose of disposers) dispose()
+    }
   }, 'ui-settings: describe mirror invalidations')
   new SettingsScopeBinder(ctx, { mirror, schema })
 }

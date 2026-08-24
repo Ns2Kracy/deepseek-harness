@@ -15,7 +15,7 @@ deepseek_harness.raw.sha256
 
 The [`zimaos-raw-preview` prerelease](https://github.com/deepseek-ai/deepseek-harness/releases/tag/zimaos-raw-preview) exposes the same two files directly from the latest successful same-repository pull-request build. Preview files can change without notice; use `latest` for a tagged build.
 
-> [!WARNING] Port 3080 exposes the Harness UI and its shell, filesystem, credential, and agent capabilities. This package adds no CasaOS Gateway route or authentication layer. Before installation starts the service, place the device on a trusted LAN or block untrusted access to port 3080 with a firewall. An authenticated reverse proxy is safe only when the firewall also permits direct port 3080 access solely from that proxy or the local host.
+> [!WARNING] Port 3080 exposes the Harness UI and its shell, filesystem, settings, credential, and agent capabilities. The ZimaOS overlay explicitly enables remote Host management, so every client that can reach an allowed authority can view or replace provider settings and API keys. This package adds no CasaOS Gateway route or authentication layer. Before installation starts the service, place the device on a trusted LAN or block untrusted access to port 3080 with a firewall. An authenticated reverse proxy is safe only when the firewall also permits direct port 3080 access solely from that proxy or the local host.
 
 ## 1. Obtain and verify the image
 
@@ -59,7 +59,7 @@ The second command must print `active`.
 
 The extension mount below `/usr` is read-only. Store configuration and runtime state in `/var/lib/casaos/deepseek_harness`; the service reads its optional `.env` file at startup.
 
-Create the file with owner-only permissions:
+The Web UI can configure providers and credentials directly without SSH. The optional file path below remains useful for provisioning or environment-owned credentials; create it with owner-only permissions:
 
 ```bash
 ssh root@ZIMAOS_IP 'install -d -m 0700 /var/lib/casaos/deepseek_harness && install -m 0600 /dev/null /var/lib/casaos/deepseek_harness/.env'
@@ -83,7 +83,7 @@ From a machine on the permitted network:
 curl --fail http://ZIMAOS_IP:3080/
 ```
 
-Open `http://ZIMAOS_IP:3080/` in a browser. The CasaOS module tile opens the same address while preserving the hostname used for CasaOS. The Web client supports this plain-HTTP LAN origin even when the browser omits secure-context-only `crypto.randomUUID()`.
+Open `http://ZIMAOS_IP:3080/` in a browser and configure the provider from Settings if the `.env` file does not supply it. The CasaOS module tile opens the same address while preserving the hostname used for CasaOS. The Web client supports this plain-HTTP LAN origin even when the browser omits secure-context-only `crypto.randomUUID()`.
 
 Check service status and recent logs if either request fails:
 

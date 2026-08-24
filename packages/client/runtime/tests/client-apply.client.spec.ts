@@ -31,6 +31,7 @@ async function mount(): Promise<Bench> {
   const handle: ConnectionHandle = {
     api,
     isLoopback: true,
+    canManageHost: true,
     hostDescription: {
       getSnapshot: () => undefined,
       subscribe: () => () => {},
@@ -40,7 +41,11 @@ async function mount(): Promise<Bench> {
     },
     start: (sinks) => {
       bench.sinks = sinks
-      return { stop: () => { bench.stopped += 1 } }
+      return {
+        stop: () => {
+          bench.stopped += 1
+        },
+      }
     },
   }
   ctx.reflect.provide('connection', handle)
@@ -60,56 +65,100 @@ describe('runtime client apply', () => {
     expect(bench.ctx.get('slots') !== undefined).toBe(true)
     // The built-in 'root' declaration ships with this package's SlotRegistry
     // (the SlotMap 'root' merge lives here).
-    expect(bench.ctx.slots.spec('root')).toEqual({ kind: 'single', scope: 'root' })
+    expect(bench.ctx.slots.spec('root')).toEqual({
+      kind: 'single',
+      scope: 'root',
+    })
     const sessions = bench.ctx.get('sessions')
     const workspaces = bench.ctx.get('workspaces')
     expect(sessions !== undefined).toBe(true)
     expect(workspaces !== undefined).toBe(true)
     // The bound the wire schema enforces, not a per-connection negotiation.
-    expect((sessions as SessionRuntime).searchResultLimit).toBe(SESSION_SEARCH_RESULT_LIMIT)
-    if (workspaces === undefined) throw new Error('WorkspaceRuntime missing after runtime apply')
+    expect((sessions as SessionRuntime).searchResultLimit).toBe(
+      SESSION_SEARCH_RESULT_LIMIT,
+    )
+    if (workspaces === undefined)
+      throw new Error('WorkspaceRuntime missing after runtime apply')
     expect(bench.sinks).toBeDefined()
 
     // Frame sinks reach the object layer: a host session-added lands in the list store.
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r1' as never,
-      payload: { type: 'host/session-added', blank: true, sessionId: 's-new' } as never,
+      payload: {
+        type: 'host/session-added',
+        blank: true,
+        sessionId: 's-new',
+      } as never,
     })
     await Promise.resolve()
-    expect((sessions as { list: { getSnapshot(): { ids: string[] } } }).list.getSnapshot().ids).toContain('s-new')
+    expect(
+      (
+        sessions as { list: { getSnapshot(): { ids: string[] } } }
+      ).list.getSnapshot().ids,
+    ).toContain('s-new')
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r-workspace' as never,
       payload: {
         type: 'host/workspace-changed',
         workspace: {
-          workspaceId: 'w-new', path: '/w/new', title: 'new', sessionIds: [],
-          createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+          workspaceId: 'w-new',
+          path: '/w/new',
+          title: 'new',
+          sessionIds: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         },
       } as never,
     })
     await Promise.resolve()
     expect(workspaces.list.getSnapshot().items[0]?.workspaceId).toBe('w-new')
     // Mux sink and onConnected route without throwing (manager semantics own the behavior).
-    bench.sinks?.onMuxEnvelope?.({ rpcId: 'r2' as never, payload: { type: 'stream/error', message: 'x' } as never })
-    bench.sinks?.onConnected?.({ version: '0', cwd: '/f', attachedSessions: 0, home: '/h', canOpenPath: true })
+    bench.sinks?.onMuxEnvelope?.({
+      rpcId: 'r2' as never,
+      payload: { type: 'stream/error', message: 'x' } as never,
+    })
+    bench.sinks?.onConnected?.({
+      version: '0',
+      cwd: '/f',
+      attachedSessions: 0,
+      home: '/h',
+      canOpenPath: true,
+    })
   })
 
   it('selects the recent Workspace once when the first baselines have no current session', async () => {
     const bench = await mount()
-    bench.api.onWorkspaceList = () => Promise.resolve(ok({
-      items: [{
-        workspaceId: 'w-recent', path: '/w/recent', title: 'recent', sessionIds: [],
-        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
-      }] as never[],
-    }))
+    bench.api.onWorkspaceList = () =>
+      Promise.resolve(
+        ok({
+          items: [
+            {
+              workspaceId: 'w-recent',
+              path: '/w/recent',
+              title: 'recent',
+              sessionIds: [],
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ] as never[],
+        }),
+      )
     bench.api.onList = () => Promise.resolve(ok({ items: [] }))
 
-    bench.sinks?.onConnected?.({ version: '0', cwd: '/f', attachedSessions: 0, home: '/h', canOpenPath: true })
+    bench.sinks?.onConnected?.({
+      version: '0',
+      cwd: '/f',
+      attachedSessions: 0,
+      home: '/h',
+      canOpenPath: true,
+    })
     await flushMicrotasks()
 
     const sessions = bench.ctx.get('sessions') as SessionRuntime
     const workspaces = bench.ctx.get('workspaces') as WorkspaceRuntime
-    expect(bench.api.callsOf('session.create')).toEqual([{ workspaceId: 'w-recent' }])
+    expect(bench.api.callsOf('session.create')).toEqual([
+      { workspaceId: 'w-recent' },
+    ])
     expect(sessions.list.getSnapshot().current).toBe('fk-new')
 
     sessions.clear()
@@ -124,7 +173,11 @@ describe('runtime client apply', () => {
     const sessions = bench.ctx.get('sessions') as SessionRuntime
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r-registry' as never,
-      payload: { type: 'host/session-added', blank: true, sessionId: 's-registry' } as never,
+      payload: {
+        type: 'host/session-added',
+        blank: true,
+        sessionId: 's-registry',
+      } as never,
     })
     await flushMicrotasks()
     expect(sessions.binding('s-registry' as never)).toBeDefined()
@@ -147,7 +200,9 @@ describe('runtime client apply', () => {
 
   it('stops the stream loop when the plugin fiber unloads', async () => {
     const bench = await mount()
-    const fiber = [...bench.ctx.registry.values()].find(f => f.name?.includes('client'))
+    const fiber = [...bench.ctx.registry.values()].find(f =>
+      f.name?.includes('client'),
+    )
     // Dispose the whole tree: the ctx.effect teardown must call loop.stop exactly once.
     await bench.ctx.fiber.dispose()
     expect(bench.stopped).toBe(1)

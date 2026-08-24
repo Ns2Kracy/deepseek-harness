@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   assertElfX64,
+  assertRemoteManagementProbeResponse,
   assertNoSymlinks,
   assertPackageIdentity,
   assertRequiredModulePaths,
@@ -21,6 +22,7 @@ import {
   normalizeWorkspaceDependencySpecifiers,
   parseNodeChecksum,
   squashFsArgs,
+  remoteManagementProbeRequest,
   untrustedHostProbeRequest,
   waitForHttpRequest,
   webProbeRequests,
@@ -212,7 +214,51 @@ describe('ZimaOS RAW assembly helpers', () => {
       },
     ])
     expect(untrustedHostProbeRequest()).toEqual(webProbeRequests()[1])
+    expect(remoteManagementProbeRequest()).toMatchObject({
+      path: '/api/settings.describe',
+      body: { method: 'settings.describe' },
+    })
     expect(untrustedHostProbeRequest().path).not.toBe('/')
+  })
+
+  it('requires remote settings management to complete at the RPC layer', () => {
+    expect(() => {
+      assertRemoteManagementProbeResponse({
+        status: 200,
+        body: JSON.stringify({
+          type: 'server-response',
+          rpcId: 'zimaos-management-probe',
+          result: {
+            ok: true,
+            value: { writable: true, namespaces: [] },
+          },
+        }),
+      })
+    }).not.toThrow()
+    for (const response of [
+      { status: 403, body: '' },
+      { status: 200, body: 'not json' },
+      {
+        status: 200,
+        body: JSON.stringify({
+          type: 'server-response',
+          rpcId: 'wrong-probe',
+          result: { ok: true, value: {} },
+        }),
+      },
+      {
+        status: 200,
+        body: JSON.stringify({
+          type: 'server-response',
+          rpcId: 'zimaos-management-probe',
+          result: { ok: false, error: { message: 'settings unavailable' } },
+        }),
+      },
+    ]) {
+      expect(() => {
+        assertRemoteManagementProbeResponse(response)
+      }).toThrow(/configured browser authority/)
+    }
   })
 
   it('retries a real HTTP request until its acceptance condition is met', async () => {

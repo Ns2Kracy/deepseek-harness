@@ -15,7 +15,7 @@ deepseek_harness.raw.sha256
 
 [`zimaos-raw-preview` 预发布版本](https://github.com/deepseek-ai/deepseek-harness/releases/tag/zimaos-raw-preview) 会直接提供最新一次同仓库 PR（Pull Request）成功构建的相同两个文件。预览文件可能随时被覆盖；需要带标签的构建时请使用 `latest`。
 
-> [!WARNING] 3080 端口会暴露 Harness UI 及其 shell、文件系统、凭据与 agent 能力。本软件包不增加 CasaOS Gateway 路由或认证层。在安装启动服务之前，请将设备放在可信局域网内，或用防火墙阻止不可信来源访问 3080 端口。只有防火墙同时将 3080 端口的直连来源限制为该反向代理或本机时，带认证的反向代理才不会被绕过。
+> [!WARNING] 3080 端口会暴露 Harness UI 及其 shell、文件系统、设置、凭据与 agent 能力。ZimaOS overlay 会显式启用远程 Host 管理，因此每个能够访问获准 authority 的客户端都可以查看或替换 provider 设置与 API key。本软件包不增加 CasaOS Gateway 路由或认证层。在安装启动服务之前，请将设备放在可信局域网内，或用防火墙阻止不可信来源访问 3080 端口。只有防火墙同时将 3080 端口的直连来源限制为该反向代理或本机时，带认证的反向代理才不会被绕过。
 
 ## 1. 获取并校验镜像
 
@@ -59,7 +59,7 @@ ssh root@ZIMAOS_IP 'systemctl is-active deepseek-harness.service'
 
 `/usr` 下的扩展挂载是只读的。将配置与运行状态存放在 `/var/lib/casaos/deepseek_harness`；服务会在启动时读取其中可选的 `.env` 文件。
 
-创建该文件并将权限限制为仅属主可读写：
+Web UI 可以直接配置 provider 与凭据，无需 SSH。以下可选文件仍适合预配或由环境持有的凭据；创建该文件并将权限限制为仅属主可读写：
 
 ```bash
 ssh root@ZIMAOS_IP 'install -d -m 0700 /var/lib/casaos/deepseek_harness && install -m 0600 /dev/null /var/lib/casaos/deepseek_harness/.env'
@@ -83,7 +83,7 @@ DSH_ZIMAOS_TRUSTED_HOST=harness.home.example
 curl --fail http://ZIMAOS_IP:3080/
 ```
 
-在浏览器中打开 `http://ZIMAOS_IP:3080/`。CasaOS 模块入口会打开同一地址，并保留访问 CasaOS 时使用的主机名。即使浏览器未提供仅限安全上下文的 `crypto.randomUUID()`，Web 客户端也支持这个普通 HTTP 局域网来源。
+在浏览器中打开 `http://ZIMAOS_IP:3080/`；如果 `.env` 没有提供凭据，请从“设置”中配置 provider。CasaOS 模块入口会打开同一地址，并保留访问 CasaOS 时使用的主机名。即使浏览器未提供仅限安全上下文的 `crypto.randomUUID()`，Web 客户端也支持这个普通 HTTP 局域网来源。
 
 如果任一请求失败，请检查服务状态与近期日志：
 

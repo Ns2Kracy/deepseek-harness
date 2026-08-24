@@ -200,6 +200,20 @@ export function webProbeRequests(): readonly HttpProbeRequest[] {
   ]
 }
 
+/** @returns privileged API request used to prove trusted remote management. */
+export function remoteManagementProbeRequest(): HttpProbeRequest {
+  return {
+    path: '/api/settings.describe',
+    method: 'POST',
+    body: {
+      type: 'client-request',
+      rpcId: 'zimaos-management-probe',
+      method: 'settings.describe',
+      payload: {},
+    },
+  }
+}
+
 /** @returns protected API request used to prove Host-authority rejection. */
 export function untrustedHostProbeRequest(): HttpProbeRequest {
   const request = webProbeRequests()[1]
@@ -502,7 +516,9 @@ class ZimaOsRawBuild {
       )
     }
     if (launcher.includes('DSH_HOME')) {
-      throw new Error(`${LOG_PREFIX}: dsh wrapper must only forward the official CLI.`)
+      throw new Error(
+        `${LOG_PREFIX}: dsh wrapper must only forward the official CLI.`,
+      )
     }
     const appRoot = stagedPath(this.rawRoot, APP_ROOT)
     assertNoSymlinks(appRoot)
@@ -545,7 +561,7 @@ class ZimaOsRawBuild {
           `${LOG_PREFIX}: [dry-run] probe ${probe.method} http://127.0.0.1:3080${probe.path}`,
         )
       console.log(
-        `${LOG_PREFIX}: [dry-run] accept configured Host ${TRUSTED_HOST_PROBE_AUTHORITY}, reject an untrusted Host, and require bounded shutdown`,
+        `${LOG_PREFIX}: [dry-run] allow settings management for configured Host ${TRUSTED_HOST_PROBE_AUTHORITY}, reject an untrusted Host, and require bounded shutdown`,
       )
       return
     }
@@ -562,10 +578,7 @@ class ZimaOsRawBuild {
       [
         'web',
         '--patch',
-        stagedPath(
-          this.rawRoot,
-          'usr/lib/deepseek-harness/zimaos.patch.yml',
-        ),
+        stagedPath(this.rawRoot, 'usr/lib/deepseek-harness/zimaos.patch.yml'),
         '--no-open',
       ],
       {
@@ -602,16 +615,12 @@ class ZimaOsRawBuild {
         response => response.status >= 200 && response.status < 400,
       )
       const trusted = await httpRequest(
-        untrustedHostProbeRequest(),
+        remoteManagementProbeRequest(),
         TRUSTED_HOST_PROBE_AUTHORITY,
       )
-      if (trusted.status >= 400) {
-        throw new Error(
-          `${LOG_PREFIX}: configured browser authority returned ${trusted.status}.`,
-        )
-      }
+      assertRemoteManagementProbeResponse(trusted)
       const untrusted = await httpRequest(
-        untrustedHostProbeRequest(),
+        remoteManagementProbeRequest(),
         'untrusted.invalid',
       )
       if (untrusted.status !== 403) {
@@ -1024,6 +1033,42 @@ async function sha256File(path: string): Promise<string> {
 interface HttpResponse {
   readonly status: number
   readonly body: string
+}
+
+/**
+ * Require one successful Typert RPC response from the remote-management probe.
+ * @param response - HTTP response returned by the staged Web Host.
+ */
+export function assertRemoteManagementProbeResponse(
+  response: HttpResponse,
+): void {
+  if (response.status >= 400) {
+    throw new Error(
+      `${LOG_PREFIX}: configured browser authority returned ${response.status}.`,
+    )
+  }
+  let value: unknown
+  try {
+    value = JSON.parse(response.body)
+  } catch {
+    throw new Error(
+      `${LOG_PREFIX}: configured browser authority returned invalid JSON.`,
+    )
+  }
+  if (
+    !isRecord(value) ||
+    value.type !== 'server-response' ||
+    value.rpcId !== 'zimaos-management-probe' ||
+    !isRecord(value.result) ||
+    value.result.ok !== true ||
+    !isRecord(value.result.value) ||
+    typeof value.result.value.writable !== 'boolean' ||
+    !Array.isArray(value.result.value.namespaces)
+  ) {
+    throw new Error(
+      `${LOG_PREFIX}: configured browser authority did not complete settings.describe.`,
+    )
+  }
 }
 
 async function httpRequest(

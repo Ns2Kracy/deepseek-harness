@@ -13,8 +13,14 @@ import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { injectBootManifest, orderByModuleGraph } from '@deepseek-ai/dsh-client-modules'
-import type { ClientModuleLoaderTarget, WebBootEntry } from '@deepseek-ai/dsh-client-modules/client'
+import {
+  injectBootManifest,
+  orderByModuleGraph,
+} from '@deepseek-ai/dsh-client-modules'
+import type {
+  ClientModuleLoaderTarget,
+  WebBootEntry,
+} from '@deepseek-ai/dsh-client-modules/client'
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web'
 
 interface AssembledPlugin extends WebBootEntry {
@@ -56,73 +62,96 @@ const BUNDLE_LAYERS = [
     patch: join(REPO_ROOT, 'packages/bundle/web-app/cordis.patch.yml'),
   },
 ] as const
-const bundleResolvers = BUNDLE_LAYERS.map(layer => createRequire(layer.manifest))
+const bundleResolvers = BUNDLE_LAYERS.map(layer =>
+  createRequire(layer.manifest),
+)
 const webBundleResolver = bundleResolvers[1]
-if (webBundleResolver === undefined) throw new Error('assembled boot: web bundle resolver missing')
-const appBoot = await import(pathToFileURL(webBundleResolver.resolve('@deepseek-ai/dsh-app-boot')).href) as unknown as BootComposition
+if (webBundleResolver === undefined)
+  throw new Error('assembled boot: web bundle resolver missing')
+const appBoot = (await import(
+  pathToFileURL(webBundleResolver.resolve('@deepseek-ai/dsh-app-boot')).href,
+)) as unknown as BootComposition
 
 function resolvePackageManifest(specifier: string): string | undefined {
   for (const require of bundleResolvers) {
     try {
       return require.resolve(`${specifier}/package.json`)
-    } catch {
-      continue
-    }
+    } catch {}
   }
   return undefined
 }
 
-function resolveClientExport(packagePath: string, pkg: ClientPackageManifest): string {
+function resolveClientExport(
+  packagePath: string,
+  pkg: ClientPackageManifest,
+): string {
   const declared = pkg.exports?.['./client']
   const relative = typeof declared === 'string' ? declared : declared?.default
   if (relative === undefined) {
-    throw new Error(`assembled boot: ${pkg.name ?? packagePath} declares dsh.client without a ./client export`)
+    throw new Error(
+      `assembled boot: ${pkg.name ?? packagePath} declares dsh.client without a ./client export`,
+    )
   }
   return resolve(dirname(packagePath), relative)
 }
 
 /** Derive the assembled browser graph from the same bundle patches and package declarations as `dsh web`. */
 function loadAssembledPlugins(): readonly AssembledPlugin[] {
-  const entries = appBoot.composeEntries(BUNDLE_LAYERS.map(layer =>
-    appBoot.loadOverlayPatches('assembled boot', layer.patch)))
+  const entries = appBoot.composeEntries(
+    BUNDLE_LAYERS.map(layer =>
+      appBoot.loadOverlayPatches('assembled boot', layer.patch),
+    ),
+  )
   const plugins = new Map<string, AssembledPlugin>()
   for (const entry of entries) {
     if (entry.disabled === true || typeof entry.name !== 'string') continue
     const packagePath = resolvePackageManifest(entry.name)
     if (packagePath === undefined) continue
-    const pkg = JSON.parse(readFileSync(packagePath, 'utf8')) as ClientPackageManifest
+    const pkg = JSON.parse(
+      readFileSync(packagePath, 'utf8'),
+    ) as ClientPackageManifest
     const declaration = pkg.dsh?.client
     if (declaration?.platform !== 'web') continue
     if (pkg.name !== entry.name) {
-      throw new Error(`assembled boot: ${entry.name} resolved package ${pkg.name ?? '<unnamed>'}`)
+      throw new Error(
+        `assembled boot: ${entry.name} resolved package ${pkg.name ?? '<unnamed>'}`,
+      )
     }
     plugins.set(entry.name, {
       id: entry.name,
       bundlePath: resolveClientExport(packagePath, pkg),
       url: `/plugins/${entry.name}/client.js?rev=fx`,
       rev: 'fx',
-      ...(declaration.inject === undefined ? {} : { inject: declaration.inject }),
-      ...(declaration.external === undefined ? {} : { external: declaration.external }),
+      ...(declaration.inject === undefined
+        ? {}
+        : { inject: declaration.inject }),
+      ...(declaration.external === undefined
+        ? {}
+        : { external: declaration.external }),
       ...(declaration.immediately === true ? { immediately: true } : {}),
     })
   }
   return orderByModuleGraph([...plugins.values()]).map(({ id }) => {
     const plugin = plugins.get(id)
     /* v8 ignore next -- orderByModuleGraph returns the input row identities */
-    if (plugin === undefined) throw new Error(`assembled boot: ordered unknown client package ${id}`)
+    if (plugin === undefined)
+      throw new Error(`assembled boot: ordered unknown client package ${id}`)
     return plugin
   })
 }
 
 const PLUGINS = loadAssembledPlugins()
 
-const bundles = new Map(PLUGINS.map(plugin => [
-  plugin.url,
-  readFileSync(plugin.bundlePath, 'utf8'),
-]))
+const bundles = new Map(
+  PLUGINS.map(plugin => [
+    plugin.url,
+    readFileSync(plugin.bundlePath, 'utf8'),
+  ]),
+)
 
 interface FixtureWindow extends Window {
   __DSH_BOOT__?: { rev: string; entries: WebBootEntry[] }
+  __DSH_CONNECTION__?: { allowRemoteManagement: boolean }
   __ModuleLoader__?: ClientModuleLoaderTarget
 }
 
@@ -154,24 +183,42 @@ export function installAssembledBootEnv(): void {
     // takes an explicit choice only from Host settings, which this lane's
     // fixture transport does not serve; pinning the navigator is what selects
     // English here.
-    Object.defineProperty(navigator, 'languages', { value: ['en-US'], configurable: true })
-    Object.defineProperty(navigator, 'language', { value: 'en-US', configurable: true })
+    Object.defineProperty(navigator, 'languages', {
+      value: ['en-US'],
+      configurable: true,
+    })
+    Object.defineProperty(navigator, 'language', {
+      value: 'en-US',
+      configurable: true,
+    })
     document.title = 'DeepSeek Harness'
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     vi.stubGlobal('EventSource', EventSourceStub)
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
-      setTimeout(() => { callback(0) }, 0) as unknown as number)
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => { clearTimeout(id) })
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      (callback: FrameRequestCallback) =>
+        setTimeout(() => {
+          callback(0)
+        }, 0) as unknown as number,
+    )
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      clearTimeout(id)
+    })
   })
 
   afterEach(async () => {
-    await act(async () => { await unmount?.() })
+    await act(async () => {
+      await unmount?.()
+    })
     unmount = undefined
     cleanup()
     delete win.__DSH_BOOT__
+    delete win.__DSH_CONNECTION__
     delete win.__ModuleLoader__
     document.body.innerHTML = ''
-    document.head.querySelectorAll('style[data-plugin]').forEach((style) => { style.remove() })
+    document.head.querySelectorAll('style[data-plugin]').forEach((style) => {
+      style.remove()
+    })
     document.title = ''
     history.replaceState(null, '', '/')
     // Deleting the own properties uncovers jsdom's own accessors again
@@ -187,31 +234,46 @@ export function installAssembledBootEnv(): void {
  * Mount the assembled application on the fixture transport; the teardown
  * registered by installAssembledBootEnv disposes it.
  * @param search - fixture query string used to select deterministic host behavior.
+ * @param remoteManagement - expose the Host's trusted-LAN management capability.
  */
-export function mountAssembledApp(search = '?fixture'): void {
+export function mountAssembledApp(
+  search = '?fixture',
+  remoteManagement = false,
+): void {
   history.replaceState(null, '', `/${search}`)
+  if (remoteManagement)
+    win.__DSH_CONNECTION__ = { allowRemoteManagement: true }
   const root = document.createElement('div')
   root.id = 'root'
   document.body.appendChild(root)
-  win.__DSH_BOOT__ = { rev: 'fx', entries: PLUGINS.map(({ bundlePath: _bundlePath, ...plugin }) => plugin) }
+  win.__DSH_BOOT__ = {
+    rev: 'fx',
+    entries: PLUGINS.map(({ bundlePath: _bundlePath, ...plugin }) => plugin),
+  }
   const html = injectBootManifest('<head></head>', win.__DSH_BOOT__)
   const facadeSource = /<head><script>([\s\S]*?)<\/script>/.exec(html)?.[1]
-  if (facadeSource === undefined) throw new Error('missing injected ModuleLoader facade')
-  ;(0, eval)(facadeSource)
+  if (facadeSource === undefined)
+    throw new Error('missing injected ModuleLoader facade');
+  (0, eval)(facadeSource)
   // Mirror the blocking Host-injected scripts before the Vite entry calls create().
-  for (const id of ['@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-client-runtime']) {
+  for (const id of [
+    '@deepseek-ai/dsh-client-modules',
+    '@deepseek-ai/dsh-client-runtime',
+  ]) {
     const plugin = PLUGINS.find(candidate => candidate.id === id)
-    if (plugin === undefined) throw new Error(`missing parser-preloaded fixture row ${id}`)
+    if (plugin === undefined)
+      throw new Error(`missing parser-preloaded fixture row ${id}`)
     const code = bundles.get(plugin.url)
-    if (code === undefined) throw new Error(`missing built bundle ${plugin.url}`)
-    ;(0, eval)(code)
+    if (code === undefined)
+      throw new Error(`missing built bundle ${plugin.url}`);
+    (0, eval)(code)
   }
   act(() => {
     const entry = new AppWebEntry(root, {
       loadBundle: async (url) => {
         const code = bundles.get(url)
-        if (code === undefined) throw new Error(`missing built bundle ${url}`)
-        ;(0, eval)(code)
+        if (code === undefined) throw new Error(`missing built bundle ${url}`);
+        (0, eval)(code)
       },
     })
     void entry.run()
@@ -230,7 +292,13 @@ export function mountAssembledApp(search = '?fixture'): void {
  * @returns whether the element carries that module class.
  */
 export function hasClass(el: Element, name: string): boolean {
-  return [...el.classList].some(cls => cls === name || cls.endsWith(`_${name}`) || cls.startsWith(`_${name}_`) || cls.includes(`_${name}_`))
+  return [...el.classList].some(
+    cls =>
+      cls === name ||
+      cls.endsWith(`_${name}`) ||
+      cls.startsWith(`_${name}_`) ||
+      cls.includes(`_${name}_`),
+  )
 }
 
 /**
@@ -238,4 +306,6 @@ export function hasClass(el: Element, name: string): boolean {
  * the snapshot gate's `DSH_SNAPSHOT` mode (`record` re-runs the scenarios from
  * scratch, `refresh` re-derives the expected text from the existing ones).
  */
-export const REFRESHING_GOLDEN = process.env.DSH_SNAPSHOT === 'record' || process.env.DSH_SNAPSHOT === 'refresh'
+export const REFRESHING_GOLDEN =
+  process.env.DSH_SNAPSHOT === 'record' ||
+  process.env.DSH_SNAPSHOT === 'refresh'

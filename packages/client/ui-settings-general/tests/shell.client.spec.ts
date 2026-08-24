@@ -2,7 +2,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
+import {
+  apply as settingsApply,
+  inject as settingsInject,
+} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '../src/client/index.ts'
 import type { SettingsRootInjected } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
@@ -21,15 +24,21 @@ async function bench() {
   ctx.provide('connection', {
     api: { settings: { describe: async () => ({ result: { ok: false } }) } },
     isLoopback: false,
+    canManageHost: false,
   } as never)
   ctx.provide('remote', { $on: () => () => {} } as never)
-  await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+  await ctx
+    .plugin({ inject: [...settingsInject], apply: settingsApply })
+    .await()
   return { ctx, slots: ctx.get('slots') as SlotRegistry }
 }
 
 function declare(slots: SlotRegistry): () => void {
   return slots.register(
-    { name: 'root', children: { 'sidebar.settings': { kind: 'single', scope: 'root' } } } as never,
+    {
+      name: 'root',
+      children: { 'sidebar.settings': { kind: 'single', scope: 'root' } },
+    } as never,
     () => null,
   )
 }
@@ -58,8 +67,12 @@ describe('ui-settings apply', () => {
     const before = await bench()
     declare(before.slots)
     await before.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(before.slots.entries('sidebar.settings')[0]!.component).toBe(SettingsRoot)
-    for (const name of Object.keys(CHILD_SPECS) as Array<keyof typeof CHILD_SPECS>) {
+    expect(before.slots.entries('sidebar.settings')[0]!.component).toBe(
+      SettingsRoot,
+    )
+    for (const name of Object.keys(CHILD_SPECS) as Array<
+      keyof typeof CHILD_SPECS
+    >) {
       expect(before.slots.spec(name)).toEqual(CHILD_SPECS[name])
     }
 
@@ -68,7 +81,9 @@ describe('ui-settings apply', () => {
     expect(after.slots.entries('sidebar.settings')).toHaveLength(0)
     declare(after.slots)
     await Promise.resolve()
-    expect(after.slots.entries('sidebar.settings')[0]!.component).toBe(SettingsRoot)
+    expect(after.slots.entries('sidebar.settings')[0]!.component).toBe(
+      SettingsRoot,
+    )
     // The self-inflicted ledger notifications hit the duplicate guard.
     expect(after.slots.entries('sidebar.settings')).toHaveLength(1)
   })
@@ -82,9 +97,15 @@ describe('ui-settings apply', () => {
     // arrives from a feature registrant.
     const GENERAL = { id: 'general', order: 0, label: 'general.nav' }
     expect(sections.getSnapshot()).toEqual([GENERAL])
-    b.slots.register({ name: 'settings.section', id: 'z', order: 20, label: 'Z' } as never, () => null)
+    b.slots.register(
+      { name: 'settings.section', id: 'z', order: 20, label: 'Z' } as never,
+      () => null,
+    )
     // No order and no label: both projection defaults apply.
-    b.slots.register({ name: 'settings.section', id: 'a' } as never, () => null)
+    b.slots.register(
+      { name: 'settings.section', id: 'a' } as never,
+      () => null,
+    )
     const rows = sections.getSnapshot()
     expect(rows).toEqual([
       GENERAL,
@@ -95,7 +116,10 @@ describe('ui-settings apply', () => {
     expect(sections.getSnapshot()).toBe(rows)
     const listener = vi.fn()
     const off = sections.subscribe(listener)
-    b.slots.register({ name: 'settings.section', id: 'b', order: 1, label: 'B' } as never, () => null)
+    b.slots.register(
+      { name: 'settings.section', id: 'b', order: 1, label: 'B' } as never,
+      () => null,
+    )
     await Promise.resolve()
     expect(listener).toHaveBeenCalled()
     expect(sections.getSnapshot()).not.toBe(rows)
@@ -107,9 +131,18 @@ describe('ui-settings apply', () => {
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const { onboardingSteps } = injectedOf(b.slots).hooks
-    b.slots.register({ name: 'settings.onboarding', id: 'credential', order: 0 } as never, () => null)
-    b.slots.register({ name: 'settings.onboarding', id: 'welcome', order: -100 } as never, () => null)
-    b.slots.register({ name: 'settings.onboarding', id: 'default-order' } as never, () => null)
+    b.slots.register(
+      { name: 'settings.onboarding', id: 'credential', order: 0 } as never,
+      () => null,
+    )
+    b.slots.register(
+      { name: 'settings.onboarding', id: 'welcome', order: -100 } as never,
+      () => null,
+    )
+    b.slots.register(
+      { name: 'settings.onboarding', id: 'default-order' } as never,
+      () => null,
+    )
     const steps = onboardingSteps.getSnapshot()
     expect(steps).toEqual([
       { id: 'welcome', order: -100 },
@@ -119,7 +152,10 @@ describe('ui-settings apply', () => {
     expect(onboardingSteps.getSnapshot()).toBe(steps)
     const listener = vi.fn()
     const off = onboardingSteps.subscribe(listener)
-    b.slots.register({ name: 'settings.onboarding', id: 'later', order: 10 } as never, () => null)
+    b.slots.register(
+      { name: 'settings.onboarding', id: 'later', order: 10 } as never,
+      () => null,
+    )
     await Promise.resolve()
     expect(listener).toHaveBeenCalledOnce()
     off()
@@ -137,8 +173,12 @@ describe('ui-settings apply', () => {
     expect(b.slots.spec('settings.trigger')).toBeUndefined()
     declare(b.slots)
     await Promise.resolve()
-    expect(b.slots.entries('sidebar.settings')[0]!.component).toBe(SettingsRoot)
-    for (const name of Object.keys(CHILD_SPECS) as Array<keyof typeof CHILD_SPECS>) {
+    expect(b.slots.entries('sidebar.settings')[0]!.component).toBe(
+      SettingsRoot,
+    )
+    for (const name of Object.keys(CHILD_SPECS) as Array<
+      keyof typeof CHILD_SPECS
+    >) {
       expect(b.slots.spec(name)).toEqual(CHILD_SPECS[name])
     }
   })
@@ -150,7 +190,9 @@ describe('ui-settings apply', () => {
     await fiber.await()
     await fiber.dispose()
     expect(b.slots.entries('sidebar.settings')).toHaveLength(0)
-    for (const name of Object.keys(CHILD_SPECS) as Array<keyof typeof CHILD_SPECS>) {
+    for (const name of Object.keys(CHILD_SPECS) as Array<
+      keyof typeof CHILD_SPECS
+    >) {
       expect(b.slots.spec(name)).toBeUndefined()
     }
   })

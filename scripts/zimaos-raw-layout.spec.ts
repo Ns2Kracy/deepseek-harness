@@ -6,7 +6,8 @@ import { verifyRuntimeClosure } from './verify-runtime-closure.ts'
 const rawRoot = resolve(import.meta.dirname, '../zimaos/raw')
 const launcherPath = 'usr/bin/dsh'
 const overlayPath = 'usr/lib/deepseek-harness/zimaos.patch.yml'
-const extensionReleasePath = 'usr/lib/extension-release.d/extension-release.deepseek_harness'
+const extensionReleasePath =
+  'usr/lib/extension-release.d/extension-release.deepseek_harness'
 const servicePath = 'usr/lib/systemd/system/deepseek-harness.service'
 const modulePath = 'usr/share/casaos/modules/deepseek_harness.json'
 const pagePath = 'usr/share/casaos/www/modules/deepseek_harness/index.html'
@@ -51,8 +52,12 @@ describe('ZimaOS RAW source layout', () => {
     expect(service).toContain(
       'ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open',
     )
-    expect(service).toContain('Environment=DSH_HOME=/var/lib/casaos/deepseek_harness')
-    expect(service).toContain('EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env')
+    expect(service).toContain(
+      'Environment=DSH_HOME=/var/lib/casaos/deepseek_harness',
+    )
+    expect(service).toContain(
+      'EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env',
+    )
     expect(service).toContain('After=network-online.target')
     expect(service).toContain('Wants=network-online.target')
     expect(service).toContain('Restart=on-failure')
@@ -82,6 +87,9 @@ describe('ZimaOS RAW source layout', () => {
     expect(overlay).toContain('openBrowser: !!js ctx.webStartup.openBrowser')
     expect(overlay).toContain('DSH_ZIMAOS_TRUSTED_HOST')
     expect(overlay).toContain('...ctx.webStartup.trustedHosts')
+    expect(overlay).toContain('- id: connection')
+    expect(overlay).toContain('trustedHosts: !!js ctx.webRuntime.trustedHosts')
+    expect(overlay).toContain('allowRemoteManagement: true')
   })
 
   it('provides a no-cache launcher page and SVG icon', async () => {
@@ -97,16 +105,16 @@ describe('ZimaOS RAW source layout', () => {
   })
 
   it('does not register a CasaOS Gateway route or depend on its message bus', async () => {
-    const contents = await Promise.all([
-      launcherPath,
-      overlayPath,
-      servicePath,
-      modulePath,
-      pagePath,
-    ].map(fixture))
+    const contents = await Promise.all(
+      [launcherPath, overlayPath, servicePath, modulePath, pagePath].map(
+        fixture,
+      ),
+    )
 
     for (const content of contents) {
-      expect(content).not.toMatch(/casaos-(?:gateway|message-bus)|gateway\/route|register.*gateway/i)
+      expect(content).not.toMatch(
+        /casaos-(?:gateway|message-bus)|gateway\/route|register.*gateway/i,
+      )
     }
   })
 })
