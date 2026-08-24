@@ -12,7 +12,8 @@ ExecStartPre=/usr/bin/install -d -m 0700 /media/ZimaOS-HD/.dsh
 ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/media
+PrivateTmp=true
+ReadWritePaths=/media/ZimaOS-HD
 Restart=on-failure
 RestartSec=5s
 
