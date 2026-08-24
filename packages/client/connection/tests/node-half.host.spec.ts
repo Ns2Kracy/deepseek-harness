@@ -23,6 +23,7 @@ import {
   MUX_EVENTS_PATH,
   type HostConnectionHandle,
 } from '../src/index.ts'
+import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
 
 /** Structural webServer fake recording both route registries. */
 function fakeHttpServer(
@@ -162,6 +163,13 @@ describe('connection node half', () => {
     expect(
       () => new Config({ allowRemoteManagement: 'yes' } as never),
     ).toThrow()
+  })
+
+  it('reserves enough default carrier capacity for the 200 MiB image batch', () => {
+    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBe(300 * 1024 * 1024)
+    expect(DEFAULT_MAX_REQUEST_BODY_BYTES).toBeGreaterThan(
+      Math.ceil((200 * 1024 * 1024 * 4) / 3) + 1024 * 1024,
+    )
   })
 
   it('fails loud when the carrier cap cannot hold the configured image batch', () => {

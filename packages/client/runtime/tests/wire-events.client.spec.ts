@@ -33,7 +33,7 @@ function forwardedEventContracts(ctx: Context): void {
     void namespace
     void source
   })
-  ctx.remote.$on('credentials/updated', () => {})
+  ctx.remote.$on('credentials/reference-updated', () => {})
   ctx.remote.$on('commands/change', () => {})
   ctx.remote.$on('llm/adapters-updated', () => {})
   ctx.remote.$on('agent-preset/selected', (sessionId, agentPreset) => {
@@ -129,7 +129,7 @@ describe('wire event bridge', () => {
       rpcId: 'r4' as never,
       payload: {
         type: 'host/remote-event',
-        event: 'credentials/updated',
+        event: 'credentials/reference-updated',
         args: ['OPENAI_API_KEY'],
       },
     })
@@ -147,7 +147,7 @@ describe('wire event bridge', () => {
 
     expect(seen).toEqual([
       ['settings/document-updated', 'llm-pi-ai', 7],
-      ['credentials/updated', 'OPENAI_API_KEY'],
+      ['credentials/reference-updated', 'OPENAI_API_KEY'],
       ['nobody/listening', 'ignored'],
     ])
   })
