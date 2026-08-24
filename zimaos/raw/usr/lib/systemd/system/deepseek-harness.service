@@ -5,10 +5,14 @@ After=network-online.target
 
 [Service]
 Type=simple
-Environment=DSH_HOME=/var/lib/casaos/deepseek_harness
-EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env
-ExecStartPre=/usr/bin/install -d -m 0700 /var/lib/casaos/deepseek_harness
+Environment=HOME=/media/ZimaOS-HD
+EnvironmentFile=-/media/ZimaOS-HD/.dsh/.env
+WorkingDirectory=/media/ZimaOS-HD
+ExecStartPre=/usr/bin/install -d -m 0700 /media/ZimaOS-HD/.dsh
 ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/media
 Restart=on-failure
 RestartSec=5s
 

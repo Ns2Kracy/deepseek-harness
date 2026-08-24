@@ -52,12 +52,15 @@ describe('ZimaOS RAW source layout', () => {
     expect(service).toContain(
       'ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open',
     )
+    expect(service).toContain('Environment=HOME=/media/ZimaOS-HD')
+    expect(service).not.toContain('Environment=DSH_HOME=')
     expect(service).toContain(
-      'Environment=DSH_HOME=/var/lib/casaos/deepseek_harness',
+      'EnvironmentFile=-/media/ZimaOS-HD/.dsh/.env',
     )
-    expect(service).toContain(
-      'EnvironmentFile=-/var/lib/casaos/deepseek_harness/.env',
-    )
+    expect(service).toContain('WorkingDirectory=/media/ZimaOS-HD')
+    expect(service).toContain('ProtectSystem=strict')
+    expect(service).toContain('ProtectHome=true')
+    expect(service).toContain('ReadWritePaths=/media')
     expect(service).toContain('After=network-online.target')
     expect(service).toContain('Wants=network-online.target')
     expect(service).toContain('Restart=on-failure')
