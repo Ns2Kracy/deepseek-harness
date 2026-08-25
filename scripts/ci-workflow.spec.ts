@@ -504,16 +504,34 @@ describe('ZimaOS RAW workflow', () => {
       .map(step => step.run)
       .join('\n')
     expect(previewScript).toContain('sha256sum -c deepseek_harness.raw.sha256')
+    expect(previewScript).not.toContain('gh release upload')
     expect(previewScript).toContain(
-      'gh release upload zimaos-raw-preview deepseek_harness.raw deepseek_harness.raw.sha256 --clobber',
+      'repos/$GITHUB_REPOSITORY/releases/$release_id',
+    )
+    expect(previewScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
+    )
+    expect(previewScript).toContain('--hostname uploads.github.com')
+    expect(previewScript).toContain('releases="$(gh api --paginate --slurp')
+    expect(previewScript).toContain('release_ids="$(jq')
+    expect(previewScript).toContain('assets="$(gh api --paginate --slurp')
+    expect(previewScript).toContain('asset_ids="$(jq')
+    expect(previewScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(previewScript).toContain('startswith("untagged-")')
+    expect(previewScript).toContain(
+      'Multiple recoverable ZimaOS RAW preview drafts exist',
     )
     expect(previewScript).toContain(
       '--force-with-lease="$preview_ref:$observed_oid"',
     )
     expect(previewScript).not.toContain('git push origin "$preview_ref" --force')
     expect(previewScript).toContain('Refusing to create zimaos-raw-preview')
-    expect(previewScript).toContain('Refusing to update zimaos-raw-preview')
     expect(previewScript).toContain('-F draft=true -F prerelease=true')
+    expect(previewScript).toContain(
+      '-f tag_name=zimaos-raw-preview -f target_commitish="$GITHUB_SHA"',
+    )
     expect(previewScript).toContain(
       '-F draft=false -F prerelease=true -f make_latest=false',
     )
@@ -521,7 +539,7 @@ describe('ZimaOS RAW workflow', () => {
       '["deepseek_harness.raw", "deepseek_harness.raw.sha256"]',
     )
     expect(
-      previewScript.indexOf('gh release upload zimaos-raw-preview'),
+      previewScript.indexOf('--hostname uploads.github.com'),
     ).toBeGreaterThan(
       previewScript.indexOf('sha256sum -c deepseek_harness.raw.sha256'),
     )
@@ -542,23 +560,41 @@ describe('ZimaOS RAW workflow', () => {
       "git tag --list 'dsh-v*' --sort=-v:refname",
     )
     expect(releaseScript).toContain('Refusing to move latest backwards')
+    expect(releaseScript).not.toContain('gh release upload')
     expect(releaseScript).toContain(
-      'gh release upload latest deepseek_harness.raw deepseek_harness.raw.sha256 --clobber',
+      'repos/$GITHUB_REPOSITORY/releases/$release_id',
+    )
+    expect(releaseScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
+    )
+    expect(releaseScript).toContain('--hostname uploads.github.com')
+    expect(releaseScript).toContain('releases="$(gh api --paginate --slurp')
+    expect(releaseScript).toContain('release_ids="$(jq')
+    expect(releaseScript).toContain('assets="$(gh api --paginate --slurp')
+    expect(releaseScript).toContain('asset_ids="$(jq')
+    expect(releaseScript).toContain('startswith("untagged-")')
+    expect(releaseScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(releaseScript).toContain(
+      'Multiple recoverable ZimaOS RAW latest drafts exist',
     )
     expect(releaseScript).toContain('-F draft=true')
-    expect(releaseScript).toContain('--latest')
     expect(releaseScript).toContain(
-      'gh release view latest --json isDraft,isPrerelease,tagName,assets',
+      '-f tag_name=latest -f target_commitish="$GITHUB_SHA"',
     )
+    expect(releaseScript).toContain('--latest')
     expect(releaseScript).toContain(
       '[\"deepseek_harness.raw\", \"deepseek_harness.raw.sha256\"]',
     )
     expect(
       releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
-    ).toBeGreaterThan(releaseScript.indexOf('gh release upload latest'))
+    ).toBeGreaterThan(
+      releaseScript.indexOf('--hostname uploads.github.com'),
+    )
     expect(
       releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
-    ).toBeGreaterThan(releaseScript.indexOf('.isDraft == true'))
+    ).toBeGreaterThan(releaseScript.indexOf('.draft == true'))
     expect(releaseScript).not.toContain('--prerelease')
     expect(releaseScript).not.toContain('--draft')
   })

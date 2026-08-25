@@ -22,7 +22,7 @@ RAW 将 `/usr/bin/dsh` 暴露为内置 Node.js 与官方 CLI 的透明包装，�
 
 该服务不注册 CasaOS Gateway 路由，也不依赖 CasaOS message bus。CasaOS 模块提供禁用缓存的启动页，保留当前主机名并导航到 `http://<host>:3080/`。完整前端仍由 `dsh web` 提供，从而保持 `/api` 请求与 WebSocket upgrade 同源。connection Host 会把对应的管理能力注入启动 HTML，因此远程 Client settings scope 使用 Host 存储，而不是不可用的 memory 模式。在任何 Client 插件激活之前，如果 HTTP 局域网来源不提供 `crypto.randomUUID()`，Web 启动入口会通过 `crypto.getRandomValues()` 提供 UUID v4 生成能力。
 
-组装器验证标识与必需路径，使用内置 Node.js 运行暂存后的 CLI，并在 Linux x64 上启动暂存启动器、探测 Web shell 与 `/api/host.describe`、通过 `DSH_ZIMAOS_TRUSTED_HOST` 配置的 authority 调用 `settings.describe`、通过不可信 Host authority 拒绝同一管理请求，并要求有界停止。它将暂存 inode 时间规范化为 `SOURCE_DATE_EPOCH` 或源码 commit 时间，并以固定创建时间、root 所有权、`-noappend` 与 `-no-xattrs` 创建 SquashFS；在 `unsquashfs` 可用时检查镜像必需路径，并在镜像旁写入 SHA-256 文件。构建输出只保存在已忽略的构建位置。GitHub Actions 保留经过校验的构建产物供 job 间传递，将成功的同仓库 PR（Pull Request）构建作为直接资产发布到滚动更新的 `zimaos-raw-preview` 预发布版本，并且只从最新成功的 `dsh-v*` 标签推进非预发布的 `latest` Release。来自 fork 的 pull request 无法获得替换预览资产所需的仓库写权限。
+组装器验证标识与必需路径，使用内置 Node.js 运行暂存后的 CLI，并在 Linux x64 上启动暂存启动器、探测 Web shell 与 `/api/host.describe`、通过 `DSH_ZIMAOS_TRUSTED_HOST` 配置的 authority 调用 `settings.describe`、通过不可信 Host authority 拒绝同一管理请求，并要求有界停止。它将暂存 inode 时间规范化为 `SOURCE_DATE_EPOCH` 或源码 commit 时间，并以固定创建时间、root 所有权、`-noappend` 与 `-no-xattrs` 创建 SquashFS；在 `unsquashfs` 可用时检查镜像必需路径，并在镜像旁写入 SHA-256 文件。构建输出只保存在已忽略的构建位置。GitHub Actions 保留经过校验的构建产物供 job 间传递，将成功的同仓库 PR（Pull Request）构建作为直接资产发布到滚动更新的 `zimaos-raw-preview` 预发布版本，并且只从最新成功的 `dsh-v*` 标签推进非预发布的 `latest` Release。两个滚动发布 job 都通过 Release database id 暂存和替换资产，因为 GitHub 会在已发布 Release 转为 draft 时解除它与稳定标签的关联。job 会恢复中断上传所留下的唯一匹配 `untagged-*` draft，在恢复候选不唯一时失败，校验 draft 资产，以 lease 移动稳定标签，并在发布 Release 时恢复 `tag_name`。来自 fork 的 pull request 无法获得替换预览资产所需的仓库写权限。
 
 ## 考虑过的替代方案
 

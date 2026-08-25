@@ -91,12 +91,16 @@ jobs:
           set -euo pipefail
           preview_ref=refs/tags/zimaos-raw-preview
           observed_oid="$(git ls-remote --tags origin "$preview_ref" | awk '{print $1}')"
-          if gh release view zimaos-raw-preview >/dev/null 2>&1; then
-            if [[ -z "$observed_oid" ]]; then
-              echo 'Refusing to update zimaos-raw-preview because its Release exists without its tag.' >&2
-              exit 1
-            fi
-            release_id="$(gh release view zimaos-raw-preview --json databaseId --jq .databaseId)"
+          releases="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          release_ids="$(jq '[.[][] | select(.tag_name == "zimaos-raw-preview" or (.draft and .prerelease and .name == "DeepSeek Harness ZimaOS RAW (preview)" and (.tag_name | startswith("untagged-")))) | .id]' <<<"$releases")"
+          if (( $(jq 'length' <<<"$release_ids") > 1 )); then
+            echo 'Multiple recoverable ZimaOS RAW preview drafts exist.' >&2
+            exit 1
+          fi
+          release_id="$(jq -r '.[0] // empty' <<<"$release_ids")"
+
+          if [[ -n "$release_id" ]]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               -F draft=true -F prerelease=true >/dev/null
           else
@@ -104,10 +108,6 @@ jobs:
               echo 'Refusing to create zimaos-raw-preview because its tag already exists without a Release.' >&2
               exit 1
             fi
-            git tag zimaos-raw-preview "$GITHUB_SHA"
-            gh auth setup-git
-            git push origin "$preview_ref"
-            observed_oid="$GITHUB_SHA"
             release_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
               -f tag_name=zimaos-raw-preview -f target_commitish="$GITHUB_SHA" \
               -f name='DeepSeek Harness ZimaOS RAW (preview)' \
@@ -115,16 +115,31 @@ jobs:
               -F draft=true -F prerelease=true --jq .id)"
           fi
 
-          gh release upload zimaos-raw-preview deepseek_harness.raw deepseek_harness.raw.sha256 --clobber
+          assets="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100")"
+          asset_ids="$(jq '[.[][] | .id]' <<<"$assets")"
+          for asset_id in $(jq -r '.[]' <<<"$asset_ids"); do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+          done
+          for asset in deepseek_harness.raw deepseek_harness.raw.sha256; do
+            gh api --method POST --hostname uploads.github.com \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
+              -H 'Content-Type: application/octet-stream' --input "$asset" >/dev/null
+          done
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            | jq -e '.draft == true and .prerelease == true and .tag_name == "zimaos-raw-preview"
+            | jq -e '.draft == true and .prerelease == true
               and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
 
           git tag -f zimaos-raw-preview "$GITHUB_SHA"
           gh auth setup-git
-          git push origin "$preview_ref" \
-            --force-with-lease="$preview_ref:$observed_oid"
+          if [[ -n "$observed_oid" ]]; then
+            git push origin "$preview_ref" \
+              --force-with-lease="$preview_ref:$observed_oid"
+          else
+            git push origin "$preview_ref"
+          fi
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f tag_name=zimaos-raw-preview -f target_commitish="$GITHUB_SHA" \
             -F draft=false -F prerelease=true -f make_latest=false >/dev/null
           gh release view zimaos-raw-preview --json isDraft,isPrerelease,tagName,assets \
             | jq -e '.isDraft == false and .isPrerelease == true and .tagName == "zimaos-raw-preview"
@@ -165,8 +180,16 @@ jobs:
             exit 1
           fi
 
-          if gh release view latest >/dev/null 2>&1; then
-            release_id="$(gh release view latest --json databaseId --jq .databaseId)"
+          releases="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          release_ids="$(jq '[.[][] | select(.tag_name == "latest" or (.draft and (.prerelease | not) and .name == "DeepSeek Harness ZimaOS RAW (latest)" and (.tag_name | startswith("untagged-")))) | .id]' <<<"$releases")"
+          if (( $(jq 'length' <<<"$release_ids") > 1 )); then
+            echo 'Multiple recoverable ZimaOS RAW latest drafts exist.' >&2
+            exit 1
+          fi
+          release_id="$(jq -r '.[0] // empty' <<<"$release_ids")"
+
+          if [[ -n "$release_id" ]]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               -F draft=true -F prerelease=false >/dev/null
           else
@@ -177,9 +200,19 @@ jobs:
               -F draft=true -F prerelease=false --jq .id)"
           fi
 
-          gh release upload latest deepseek_harness.raw deepseek_harness.raw.sha256 --clobber
-          gh release view latest --json isDraft,isPrerelease,tagName,assets \
-            | jq -e '.isDraft == true and .isPrerelease == false and .tagName == "latest"
+          assets="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100")"
+          asset_ids="$(jq '[.[][] | .id]' <<<"$assets")"
+          for asset_id in $(jq -r '.[]' <<<"$asset_ids"); do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+          done
+          for asset in deepseek_harness.raw deepseek_harness.raw.sha256; do
+            gh api --method POST --hostname uploads.github.com \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
+              -H 'Content-Type: application/octet-stream' --input "$asset" >/dev/null
+          done
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            | jq -e '.draft == true and .prerelease == false
               and ([.assets[].name] | sort) == ["deepseek_harness.raw", "deepseek_harness.raw.sha256"]'
 
           git tag -f latest "$GITHUB_SHA"
@@ -191,6 +224,7 @@ jobs:
             git push origin "$latest_ref"
           fi
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f tag_name=latest -f target_commitish="$GITHUB_SHA" \
             -F draft=false -F prerelease=false -f make_latest=true >/dev/null
           gh release edit latest --latest
           gh release view latest --json isDraft,isPrerelease,tagName,assets \
