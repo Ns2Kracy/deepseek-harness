@@ -122,8 +122,8 @@ jobs:
             gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
           done
           for asset in deepseek_harness.raw deepseek_harness.raw.sha256; do
-            gh api --method POST --hostname uploads.github.com \
-              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
+            gh api --method POST \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
               -H 'Content-Type: application/octet-stream' --input "$asset" >/dev/null
           done
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
@@ -207,8 +207,8 @@ jobs:
             gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
           done
           for asset in deepseek_harness.raw deepseek_harness.raw.sha256; do
-            gh api --method POST --hostname uploads.github.com \
-              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
+            gh api --method POST \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset" \
               -H 'Content-Type: application/octet-stream' --input "$asset" >/dev/null
           done
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \

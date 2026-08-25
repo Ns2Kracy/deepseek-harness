@@ -511,7 +511,10 @@ describe('ZimaOS RAW workflow', () => {
     expect(previewScript).toContain(
       'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
     )
-    expect(previewScript).toContain('--hostname uploads.github.com')
+    expect(previewScript).not.toContain('--hostname uploads.github.com')
+    expect(previewScript).toContain(
+      'https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
     expect(previewScript).toContain('releases="$(gh api --paginate --slurp')
     expect(previewScript).toContain('release_ids="$(jq')
     expect(previewScript).toContain('assets="$(gh api --paginate --slurp')
@@ -539,7 +542,7 @@ describe('ZimaOS RAW workflow', () => {
       '["deepseek_harness.raw", "deepseek_harness.raw.sha256"]',
     )
     expect(
-      previewScript.indexOf('--hostname uploads.github.com'),
+      previewScript.indexOf('https://uploads.github.com/repos/$GITHUB_REPOSITORY'),
     ).toBeGreaterThan(
       previewScript.indexOf('sha256sum -c deepseek_harness.raw.sha256'),
     )
@@ -567,7 +570,10 @@ describe('ZimaOS RAW workflow', () => {
     expect(releaseScript).toContain(
       'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
     )
-    expect(releaseScript).toContain('--hostname uploads.github.com')
+    expect(releaseScript).not.toContain('--hostname uploads.github.com')
+    expect(releaseScript).toContain(
+      'https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
     expect(releaseScript).toContain('releases="$(gh api --paginate --slurp')
     expect(releaseScript).toContain('release_ids="$(jq')
     expect(releaseScript).toContain('assets="$(gh api --paginate --slurp')
@@ -590,7 +596,7 @@ describe('ZimaOS RAW workflow', () => {
     expect(
       releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
     ).toBeGreaterThan(
-      releaseScript.indexOf('--hostname uploads.github.com'),
+      releaseScript.indexOf('https://uploads.github.com/repos/$GITHUB_REPOSITORY'),
     )
     expect(
       releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
