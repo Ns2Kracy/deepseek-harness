@@ -5,9 +5,19 @@ import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-general/client'
-import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
+import {
+  apply as settingsApply,
+  inject as settingsInject,
+} from '@deepseek-ai/dsh-client-ui-settings/client'
+import {
+  apply,
+  inject,
+} from '@deepseek-ai/dsh-client-ui-settings-general/client'
+import {
+  CloseLabel,
+  HeaderContent,
+  TriggerContent,
+} from '../src/client/chrome.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
@@ -31,28 +41,46 @@ async function bench(isLoopback = true) {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  const settingsDescribe = vi.fn(() => Promise.resolve({
-    rpcId: 'settings-general' as never,
-    result: {
-      ok: true as const,
-      value: {
-        writable: true,
-        hasDocument: true,
-        namespaces: [],
+  const settingsDescribe = vi.fn(() =>
+    Promise.resolve({
+      rpcId: 'settings-general' as never,
+      result: {
+        ok: true as const,
+        value: {
+          writable: true,
+          hasDocument: true,
+          namespaces: [],
+        },
+      },
+    }),
+  )
+  const settingsOpenDocument = vi.fn(() =>
+    Promise.resolve({
+      rpcId: 'settings-open' as never,
+      result: { ok: true as const, value: { opened: true as const } },
+    }),
+  )
+  ctx.provide('connection', {
+    api: {
+      settings: {
+        describe: settingsDescribe,
+        openDocument: settingsOpenDocument,
       },
     },
-  }))
-  const settingsOpenDocument = vi.fn(() => Promise.resolve({
-    rpcId: 'settings-open' as never,
-    result: { ok: true as const, value: { opened: true as const } },
-  }))
-  ctx.provide('connection', {
-    api: { settings: { describe: settingsDescribe, openDocument: settingsOpenDocument } },
     isLoopback,
+    canManageHost: isLoopback,
   } as never)
   new TestRemote(ctx)
-  await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, settingsDescribe, settingsOpenDocument }
+  await ctx
+    .plugin({ inject: [...settingsInject], apply: settingsApply })
+    .await()
+  return {
+    ctx,
+    slots: ctx.get('slots') as SlotRegistry,
+    locale,
+    settingsDescribe,
+    settingsOpenDocument,
+  }
 }
 
 /** Declare the shell's six child slots the way ui-settings' entry does. */
@@ -74,7 +102,9 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 function generalEntry(slots: SlotRegistry) {
-  return slots.entries('settings.section').find(e => e.component === GeneralSection)
+  return slots
+    .entries('settings.section')
+    .find(e => e.component === GeneralSection)
 }
 
 describe('ui-settings-general apply', () => {
@@ -93,13 +123,18 @@ describe('ui-settings-general apply', () => {
     expect(entry.options).toMatchObject({ id: 'general', order: 0 })
     // The nav label is a locale-following thunk; owners resolve at read time.
     expect(resolveSlotLabel(entry.options.label)).toBe('通用设置')
-    expect(before.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
+    expect(before.slots.spec('settings.general.item')).toEqual({
+      kind: 'list',
+      scope: 'root',
+    })
     expect(before.slots.entries('settings.general.item')).toEqual([])
     // The onboarding hole stays declared for feature-owned steps; this plugin
     // no longer seats one.
     expect(before.slots.entries('settings.onboarding')).toEqual([])
     const action = before.slots.entries('settings.action')[0]!
-    const actionInjected = (action.inject as unknown as () => SettingsDocumentActionInjected)()
+    const actionInjected = (
+      action.inject as unknown as () => SettingsDocumentActionInjected
+    )()
     expect(actionInjected.controller.store.getSnapshot().status).toBe('idle')
     expect(actionInjected.hooks.snapshot).toBe(actionInjected.controller.store)
     // Copy rides the standard locale seat: every seat declares the namespace.
@@ -108,7 +143,8 @@ describe('ui-settings-general apply', () => {
     }
     const after = await bench()
     await after.ctx.plugin({ inject: [...inject], apply }).await()
-    for (const [name] of SEATS) expect(after.slots.entries(name)).toHaveLength(0)
+    for (const [name] of SEATS)
+      expect(after.slots.entries(name)).toHaveLength(0)
     declare(after.slots)
     await Promise.resolve()
     for (const [name, component] of SEATS) {
@@ -117,7 +153,10 @@ describe('ui-settings-general apply', () => {
       expect(after.slots.entries(name)).toHaveLength(1)
     }
     await vi.waitFor(() => {
-      expect(after.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
+      expect(after.slots.spec('settings.general.item')).toEqual({
+        kind: 'list',
+        scope: 'root',
+      })
     })
   })
 
@@ -148,9 +187,13 @@ describe('ui-settings-general apply', () => {
       expect(b.slots.getVersion(name)).toBe(zhVersions[i]!)
       expect(b.slots.entries(name)).toHaveLength(1)
     })
-    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('General')
+    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe(
+      'General',
+    )
     b.locale.setLocale('zh')
-    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('通用设置')
+    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe(
+      '通用设置',
+    )
   })
 
   it('reads availability from the shared mirror and follows its reconnect refresh', async () => {
@@ -158,14 +201,20 @@ describe('ui-settings-general apply', () => {
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const entry = b.slots.entries('settings.action')[0]!
-    const { controller } = (entry.inject as unknown as () => SettingsDocumentActionInjected)()
+    const { controller } = (
+      entry.inject as unknown as () => SettingsDocumentActionInjected
+    )()
     // The mirror read once at its own boot; the action's load adds no read.
-    await vi.waitFor(() => { expect(b.settingsDescribe).toHaveBeenCalledOnce() })
+    await vi.waitFor(() => {
+      expect(b.settingsDescribe).toHaveBeenCalledOnce()
+    })
     await controller.load()
     expect(b.settingsDescribe).toHaveBeenCalledOnce()
     expect(controller.store.getSnapshot().status).toBe('ready')
     b.ctx.emit('connection/reset')
-    await vi.waitFor(() => { expect(b.settingsDescribe).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => {
+      expect(b.settingsDescribe).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('withholds the loopback-only document action off-loopback', async () => {
@@ -194,10 +243,15 @@ describe('ui-settings-general apply', () => {
       expect(b.slots.entries(name)[0]!.component).toBe(component)
     }
     expect(b.slots.entries('settings.general.item')).toEqual([])
-    expect(b.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
+    expect(b.slots.spec('settings.general.item')).toEqual({
+      kind: 'list',
+      scope: 'root',
+    })
     // The recovered registrations still ride the locale path.
     b.locale.setLocale('en')
-    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('General')
+    expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe(
+      'General',
+    )
     b.locale.setLocale('zh')
   })
 

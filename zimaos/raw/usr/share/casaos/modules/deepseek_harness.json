@@ -1,0 +1,29 @@
+{
+  "name": "deepseek_harness",
+  "ui": {
+    "name": "deepseek_harness",
+    "title": {
+      "en_us": "DeepSeek Harness",
+      "zh_cn": "DeepSeek Harness"
+    },
+    "prefetch": true,
+    "show": true,
+    "entry": "/modules/deepseek_harness/index.html",
+    "icon": "/modules/deepseek_harness/appicon.svg",
+    "description": "AI agent harness",
+    "formality": {
+      "type": "newtab",
+      "props": {
+        "width": "100vh",
+        "height": "100vh",
+        "hasModalCard": true,
+        "animation": "zoom-in"
+      }
+    }
+  },
+  "services": [
+    {
+      "name": "deepseek-harness"
+    }
+  ]
+}

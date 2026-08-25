@@ -5,7 +5,12 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { HostDescription, IApiClient } from './api.ts'
-import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type ConnectionState } from './connection.ts'
+import {
+  ConnectionController,
+  type ConnectionConfig,
+  type ConnectionSinks,
+  type ConnectionState,
+} from './connection.ts'
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
 import { createWebConnectionRpc, type RpcFetch } from './rpc.ts'
@@ -14,21 +19,72 @@ import type { ClientConnectionRpc } from '../rpc.ts'
 
 // ---- Contract re-exports (browser-safe apiproxy channels + core types) ----
 export type {
-  ApiProxy, SessionsApi, SessionSearchItem, SessionSummary, PromptContentPart, HostApi, EventsApi, MuxFrame, HostFrame,
-  ApprovalResponsePayload, QuestionResponsePayload, HistoryEntry, ToolEventView,
-  DirectoryEntry, DirectoryListing,
-  ToolCallView, ToolResultView, WorkspaceApi, WorkspaceId, WorkspaceView,
-  SkillsApi, SkillEntry,
-  ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
-  MessageId, ModelReasoningEffort, ModelSelection, QueueAction, QueuedInboxItem, SessionModels,
-  SubagentsApi, SubagentAddress, SubagentCatalog, SubagentListEntry, SubagentPromptReceipt,
+  ApiProxy,
+  SessionsApi,
+  SessionSearchItem,
+  SessionSummary,
+  PromptContentPart,
+  HostApi,
+  EventsApi,
+  MuxFrame,
+  HostFrame,
+  ApprovalResponsePayload,
+  QuestionResponsePayload,
+  HistoryEntry,
+  ToolEventView,
+  DirectoryEntry,
+  DirectoryListing,
+  ToolCallView,
+  ToolResultView,
+  WorkspaceApi,
+  WorkspaceId,
+  WorkspaceView,
+  SkillsApi,
+  SkillEntry,
+  ModelCatalogFailure,
+  ModelCatalogModel,
+  ModelProviderGroup,
+  ModelReasoning,
+  MessageId,
+  ModelReasoningEffort,
+  ModelSelection,
+  QueueAction,
+  QueuedInboxItem,
+  SessionModels,
+  SubagentsApi,
+  SubagentAddress,
+  SubagentCatalog,
+  SubagentListEntry,
+  SubagentPromptReceipt,
   JobView,
-  RpcRequest, RpcResponse, RpcResult, RpcError, RpcErrorCode,
-  ClientRequest, ServerResponse, ServerRequest, ClientResponse, RpcMessage, RpcReceipt,
-  HostDescription, IApiClient, SessionId, SessionEvent, ContentBlock, StreamChunk,
-  GoalsApi, GoalRef,
-  SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView,
-  CredentialsApi, CredentialView, ConfigurableProviderView, DiscoveredModelView, LlmApi,
+  RpcRequest,
+  RpcResponse,
+  RpcResult,
+  RpcError,
+  RpcErrorCode,
+  ClientRequest,
+  ServerResponse,
+  ServerRequest,
+  ClientResponse,
+  RpcMessage,
+  RpcReceipt,
+  HostDescription,
+  IApiClient,
+  SessionId,
+  SessionEvent,
+  ContentBlock,
+  StreamChunk,
+  GoalsApi,
+  GoalRef,
+  SettingsApi,
+  SettingsNamespaceView,
+  SettingsPathOpView,
+  SettingsSecretView,
+  CredentialsApi,
+  CredentialView,
+  ConfigurableProviderView,
+  DiscoveredModelView,
+  LlmApi,
 } from './api.ts'
 export {
   RpcId,
@@ -87,6 +143,8 @@ export interface ConnectionHandle {
   readonly api: IApiClient
   /** Whether the current page authority is loopback; non-browser contexts default to true. */
   readonly isLoopback: boolean
+  /** Whether this browser may call Host-management methods. */
+  readonly canManageHost: boolean
   /** Generation-scoped Host facts, including the account home and native path-open capability. */
   readonly hostDescription: HostDescriptionSource
   /** Generic logical RPC channels over the same Connection transport. */
@@ -108,11 +166,34 @@ export interface ConnectionHandle {
  */
 export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
-  const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
+  const fixture =
+    pageLocation !== undefined &&
+    new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
   const transport = (globalThis as ClientTransportGlobal).__DSH_TRANSPORT__
-  const api: IApiClient = fixtureClient ?? transport?.createApiClient() ?? new WebApiClient()
+  const api: IApiClient =
+    fixtureClient ?? transport?.createApiClient() ?? new WebApiClient()
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc(transport?.fetch)
+  const loopback =
+    pageLocation === undefined || isLoopbackHostname(pageLocation.hostname)
+  const capability = (
+    globalThis as typeof globalThis & { __DSH_CONNECTION__?: unknown }
+  ).__DSH_CONNECTION__
+  let allowRemoteManagement = false
+  if (capability !== undefined) {
+    if (
+      typeof capability !== 'object' ||
+      capability === null ||
+      typeof (capability as Record<string, unknown>).allowRemoteManagement !==
+        'boolean'
+    ) {
+      throw new Error(
+        'connection: window.__DSH_CONNECTION__.allowRemoteManagement must be a boolean',
+      )
+    }
+    allowRemoteManagement = (capability as { allowRemoteManagement: boolean })
+      .allowRemoteManagement
+  }
   let started = false
   let description: HostDescription | undefined
   const descriptionListeners = new Set<() => void>()
@@ -129,34 +210,44 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    isLoopback: loopback,
+    canManageHost: loopback || allowRemoteManagement,
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {
         descriptionListeners.add(listener)
-        return () => { descriptionListeners.delete(listener) }
+        return () => {
+          descriptionListeners.delete(listener)
+        }
       },
     },
     rpc,
     start(sinks, config) {
-      if (started) throw new Error('connection: the stream loop is already owned by another consumer')
+      if (started)
+        throw new Error(
+          'connection: the stream loop is already owned by another consumer',
+        )
       started = true
-      const controller = new ConnectionController(api, {
-        ...sinks,
-        onConnected: (next) => {
-          publishDescription(next)
-          // A description subscriber may synchronously stop the loop. In that
-          // case publishDescription(undefined) has already retracted this
-          // generation, so do not leak its stale connected notification to
-          // the consumer sink afterward.
-          if (!Object.is(description, next)) return
-          sinks.onConnected?.(next)
+      const controller = new ConnectionController(
+        api,
+        {
+          ...sinks,
+          onConnected: (next) => {
+            publishDescription(next)
+            // A description subscriber may synchronously stop the loop. In that
+            // case publishDescription(undefined) has already retracted this
+            // generation, so do not leak its stale connected notification to
+            // the consumer sink afterward.
+            if (!Object.is(description, next)) return
+            sinks.onConnected?.(next)
+          },
+          onStateChange: (state) => {
+            if (state === 'reconnecting') publishDescription(undefined)
+            sinks.onStateChange?.(state)
+          },
         },
-        onStateChange: (state) => {
-          if (state === 'reconnecting') publishDescription(undefined)
-          sinks.onStateChange?.(state)
-        },
-      }, config ?? {})
+        config ?? {},
+      )
       controller.start()
       return {
         stop: () => {

@@ -1,0 +1,17 @@
+- id: webserver
+  config:
+    host: 0.0.0.0
+    port: !!js ctx.webStartup.port ?? 3080
+
+- id: connection
+  config:
+    trustedHosts: !!js ctx.webRuntime.trustedHosts
+    allowRemoteManagement: true
+
+- id: web-runtime
+  config:
+    openBrowser: !!js ctx.webStartup.openBrowser
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js >-
+      process.env.DSH_ZIMAOS_TRUSTED_HOST ? [process.env.DSH_ZIMAOS_TRUSTED_HOST, ...ctx.webStartup.trustedHosts] : ctx.webStartup.trustedHosts

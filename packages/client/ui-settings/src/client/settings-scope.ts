@@ -11,11 +11,17 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  ConnectionHandle, IApiClient, SettingsNamespaceView, SettingsPathOpView,
+  ConnectionHandle,
+  IApiClient,
+  SettingsNamespaceView,
+  SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  createSnapshotStore, type SettingsScope, type SettingsScopeSnapshot,
-  type SettingsScopeSpec, type SnapshotStore,
+  createSnapshotStore,
+  type SettingsScope,
+  type SettingsScopeSnapshot,
+  type SettingsScopeSpec,
+  type SnapshotStore,
 } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only, and deliberately NOT `@deepseek-ai/dsh-api-remotes/client`: this
 // package is reachable from the Host build graph through its feature-package
@@ -34,7 +40,10 @@ import type {} from '@deepseek-ai/dsh-api-remotes/types'
 // cordis `Events` entry (and with it the branded `SettingsNamespace`).
 import type {} from '@deepseek-ai/dsh-settings/types'
 import type { SettingsSchemaService } from './schema.ts'
-import { SettingsDescribeMirror, type SettingsDescribeFace } from './settings-mirror.ts'
+import {
+  SettingsDescribeMirror,
+  type SettingsDescribeFace,
+} from './settings-mirror.ts'
 
 type SettingsFace = Pick<IApiClient, 'settings'>
 
@@ -81,7 +90,9 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
       mode: persistence,
     })
     if (persistence === 'host') {
-      this.unsubscribe = mirror.subscribe(() => { this.derive() })
+      this.unsubscribe = mirror.subscribe(() => {
+        this.derive()
+      })
       this.derive()
     }
   }
@@ -170,7 +181,8 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
-    if (this.persistence === 'memory' || this.disposed) return Promise.resolve()
+    if (this.persistence === 'memory' || this.disposed)
+      return Promise.resolve()
     const task = this.tail.then(async () => {
       if (this.disposed) return
       await operation()
@@ -186,7 +198,9 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
     const mirrored = this.mirror.getSnapshot()
     if (mirrored.view === undefined) return
     const { writable } = mirrored.view
-    const view = mirrored.view.namespaces.find(candidate => candidate.ns === this.spec.namespace)
+    const view = mirrored.view.namespaces.find(
+      candidate => candidate.ns === this.spec.namespace,
+    )
     if (view === undefined) {
       this.store.update((draft) => {
         draft.status = 'unavailable'
@@ -210,16 +224,24 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
     if (this.spec.decode !== undefined) return this.spec.decode(view.value)
     // Sections are plain objects by construction; schemastery alone would
     // resolve null or an array through object defaults instead of refusing.
-    if (typeof view.value !== 'object' || view.value === null || Array.isArray(view.value)) return undefined
+    if (
+      typeof view.value !== 'object' ||
+      view.value === null ||
+      Array.isArray(view.value)
+    )
+      return undefined
     let failure: string | undefined
     try {
-      failure = this.schema.validate(this.schema.rehydrate(view.schema), view.value)
+      failure = this.schema.validate(
+        this.schema.rehydrate(view.schema),
+        view.value,
+      )
     } catch (_malformedSchemaEnvelope) {
       // A schema envelope this client cannot rehydrate vouches for no section;
       // the value is treated exactly like a schema-invalid one.
       return undefined
     }
-    return failure === undefined ? view.value as T : undefined
+    return failure === undefined ? (view.value as T) : undefined
   }
 }
 
@@ -245,7 +267,10 @@ export class SettingsScopeBinder extends Service {
    * @param config - the shared describe mirror every bound scope derives from,
    * plus the settings-owned schema operations.
    */
-  constructor(ctx: Context, config: { mirror: SettingsDescribeMirror; schema: SettingsSchemaService }) {
+  constructor(
+    ctx: Context,
+    config: { mirror: SettingsDescribeMirror; schema: SettingsSchemaService },
+  ) {
     super(ctx, 'settingsScope')
     this.mirror = config.mirror
     this.schema = config.schema
@@ -279,7 +304,7 @@ export class SettingsScopeBinder extends Service {
       connection.api,
       spec,
       this.mirror,
-      connection.isLoopback ? 'host' : 'memory',
+      connection.canManageHost ? 'host' : 'memory',
       this.schema,
     )
     ctx.effect(() => {

@@ -403,6 +403,13 @@ const reference = [
     order,
   }))),
   ...pairedPages([{
+    source: 'docs/cookbook/zimaos-raw.md',
+    route: 'reference/cookbook/zimaos-raw.md',
+    label: { root: '安装 ZimaOS RAW', en: 'Installing the ZimaOS RAW' },
+    sidebar: { root: 'zh-reference', en: 'en-reference' },
+    section: { root: '开发手册', en: 'Cookbook' },
+    order: 6,
+  }, {
     source: 'docs/cookbook/adding-a-conversation-node.md',
     route: 'reference/cookbook/adding-a-conversation-node.md',
     label: { root: '新增 Conversation Node', en: 'Adding a Conversation Node' },

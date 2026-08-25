@@ -17,7 +17,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls ctx.locale into this program.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {
-  SettingsOnboardingStep, SettingsRootInjected, SettingsSectionRow,
+  SettingsOnboardingStep,
+  SettingsRootInjected,
+  SettingsSectionRow,
 } from './shell-contract.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
@@ -28,12 +30,15 @@ import { SettingsDocumentStore } from './settings-document-store.ts'
 import { en, zh, type SettingsKey } from './locales.ts'
 
 export type {
-  CloseLabelProps, HeaderContentProps, TriggerContentProps,
+  CloseLabelProps,
+  HeaderContentProps,
+  TriggerContentProps,
 } from './chrome.tsx'
+export type { GeneralSectionComponentProps } from './GeneralSection.tsx'
 export type {
-  GeneralSectionComponentProps,
-} from './GeneralSection.tsx'
-export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
+  SettingsDocumentActionInjected,
+  SettingsDocumentActionProps,
+} from './SettingsDocumentAction.tsx'
 export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
 export type { SettingsKey } from './locales.ts'
@@ -61,7 +66,10 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-general: dictionaries')
+  ctx.effect(
+    () => ctx.locale.register(NS, { zh, en }),
+    'ui-settings-general: dictionaries',
+  )
 
   // Copy freshness is framework-owned: components read the standard `t`
   // seat, and the nav label is a thunk the owner resolves per render — no
@@ -70,16 +78,22 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   // The action follows the shared describe mirror, whose owning plugin
   // already refreshes it on document commits and reconnects.
-  const documentController = connection.isLoopback
+  const documentController = connection.canManageHost
     ? new SettingsDocumentStore(connection.api, ctx.settingsScope.describe())
     : undefined
-  const documentInjected = documentController === undefined
-    ? undefined
-    : (): SettingsDocumentActionInjected => ({
-      controller: documentController,
-      hooks: { snapshot: documentController.store },
-    })
-  ctx.effect(() => () => { documentController?.dispose() }, 'ui-settings-general: document action directory')
+  const documentInjected =
+    documentController === undefined
+      ? undefined
+      : (): SettingsDocumentActionInjected => ({
+        controller: documentController,
+        hooks: { snapshot: documentController.store },
+      })
+  ctx.effect(
+    () => () => {
+      documentController?.dispose()
+    },
+    'ui-settings-general: document action directory',
+  )
   // The settings shell: this package occupies the sidebar-owned hole and
   // declares the settings slots. Ledger → nav-row projection as an observable
   // source (uSES contract: getSnapshot returns the cached rows until the
@@ -99,7 +113,8 @@ export function apply(ctx: ClientContext): void {
           if (version !== rowsVersion || revision !== rowsRevision) {
             rowsVersion = version
             rowsRevision = revision
-            rows = ctx.slots.entries('settings.section')
+            rows = ctx.slots
+              .entries('settings.section')
               .map(e => ({
                 /* v8 ignore next -- list-slot registration requires id (SlotCore rejects an entry without one) */
                 id: e.options.id ?? '',
@@ -124,7 +139,8 @@ export function apply(ctx: ClientContext): void {
           const version = ctx.slots.getVersion('settings.onboarding')
           if (version !== onboardingVersion) {
             onboardingVersion = version
-            onboardingSteps = ctx.slots.entries('settings.onboarding')
+            onboardingSteps = ctx.slots
+              .entries('settings.onboarding')
               .map(e => ({
                 /* v8 ignore next -- list-slot registration requires id */
                 id: e.options.id ?? '',
@@ -134,44 +150,66 @@ export function apply(ctx: ClientContext): void {
           }
           return onboardingSteps
         },
-        subscribe: listener => ctx.slots.subscribe('settings.onboarding', listener),
+        subscribe: listener =>
+          ctx.slots.subscribe('settings.onboarding', listener),
       },
     },
   })
-  ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
-    name: 'sidebar.settings',
-    children: {
-      'settings.trigger': { kind: 'single', scope: 'root' },
-      'settings.header': { kind: 'single', scope: 'root' },
-      'settings.action': { kind: 'list', scope: 'root' },
-      'settings.close': { kind: 'single', scope: 'root' },
-      'settings.section': { kind: 'list', scope: 'root' },
-      'settings.onboarding': { kind: 'list', scope: 'root' },
-    },
-    inject: shellInjected,
-  }, SettingsRoot))
+  ctx.slots.inject('sidebar.settings', () =>
+    ctx.slots.register(
+      {
+        name: 'sidebar.settings',
+        children: {
+          'settings.trigger': { kind: 'single', scope: 'root' },
+          'settings.header': { kind: 'single', scope: 'root' },
+          'settings.action': { kind: 'list', scope: 'root' },
+          'settings.close': { kind: 'single', scope: 'root' },
+          'settings.section': { kind: 'list', scope: 'root' },
+          'settings.onboarding': { kind: 'list', scope: 'root' },
+        },
+        inject: shellInjected,
+      },
+      SettingsRoot,
+    ),
+  )
 
   ctx.slots.inject('settings.trigger', () =>
-    ctx.slots.register({ name: 'settings.trigger', locale: NS }, TriggerContent))
+    ctx.slots.register(
+      { name: 'settings.trigger', locale: NS },
+      TriggerContent,
+    ),
+  )
   ctx.slots.inject('settings.header', () =>
-    ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent))
+    ctx.slots.register({ name: 'settings.header', locale: NS }, HeaderContent),
+  )
   if (documentInjected !== undefined) {
-    ctx.slots.inject('settings.action', () => ctx.slots.register({
-      name: 'settings.action',
-      id: 'open-document',
-      order: 0,
-      locale: NS,
-      inject: documentInjected,
-    }, SettingsDocumentAction))
+    ctx.slots.inject('settings.action', () =>
+      ctx.slots.register(
+        {
+          name: 'settings.action',
+          id: 'open-document',
+          order: 0,
+          locale: NS,
+          inject: documentInjected,
+        },
+        SettingsDocumentAction,
+      ),
+    )
   }
   ctx.slots.inject('settings.close', () =>
-    ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel))
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'general',
-    order: 0,
-    label: () => t('general.nav'),
-    locale: NS,
-    children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
-  }, GeneralSection))
+    ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel),
+  )
+  ctx.slots.inject('settings.section', () =>
+    ctx.slots.register(
+      {
+        name: 'settings.section',
+        id: 'general',
+        order: 0,
+        label: () => t('general.nav'),
+        locale: NS,
+        children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
+      },
+      GeneralSection,
+    ),
+  )
 }

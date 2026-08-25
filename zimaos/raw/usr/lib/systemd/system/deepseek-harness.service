@@ -1,0 +1,19 @@
+[Unit]
+Description=DeepSeek Harness
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME=/media/ZimaOS-HD
+EnvironmentFile=-/media/ZimaOS-HD/.dsh/.env
+WorkingDirectory=/media/ZimaOS-HD
+ExecStart=/usr/bin/dsh web --patch /usr/lib/deepseek-harness/zimaos.patch.yml --no-open
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

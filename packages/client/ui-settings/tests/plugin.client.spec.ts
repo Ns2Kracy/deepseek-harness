@@ -12,18 +12,32 @@ import { SettingsSchemaService } from '../src/client/schema.ts'
 import { SettingsScopeBinder } from '../src/client/settings-scope.ts'
 
 /** Boot the browser half over a fake loopback connection and test remote. */
-function bench() {
+function bench({
+  isLoopback = true,
+  canManageHost = isLoopback,
+}: {
+  isLoopback?: boolean
+  canManageHost?: boolean
+} = {}) {
   const describeCall = vi.fn().mockResolvedValue({
     rpcId: 'plugin-bench' as never,
-    result: { ok: true, value: { writable: true, hasDocument: true, namespaces: [] } },
+    result: {
+      ok: true,
+      value: { writable: true, hasDocument: true, namespaces: [] },
+    },
   })
   const ctx = new Context()
   ctx.provide('connection', {
     api: { settings: { describe: describeCall } },
-    isLoopback: true,
+    isLoopback,
+    canManageHost,
   } as never)
   new TestRemote(ctx)
-  return { ctx, describeCall, fiber: ctx.plugin({ inject: [...inject], apply }) }
+  return {
+    ctx,
+    describeCall,
+    fiber: ctx.plugin({ inject: [...inject], apply }),
+  }
 }
 
 describe('settings domain base plugin', () => {
@@ -32,23 +46,54 @@ describe('settings domain base plugin', () => {
     await fiber.await()
     expect(ctx.get('settingsScope')).toBeInstanceOf(SettingsScopeBinder)
     expect(ctx.get('settingsSchema')).toBeInstanceOf(SettingsSchemaService)
-    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(1) })
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('refreshes the mirror on document commits and connection resets, once each', async () => {
     const { ctx, describeCall, fiber } = bench()
     await fiber.await()
-    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(1) })
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(1)
+    })
     ctx.remote.$dispatch('settings/document-updated', ['ui-test', 0])
-    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(2)
+    })
     ctx.emit('connection/reset')
-    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(3) })
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  it('uses Host settings for an opted-in remote browser', async () => {
+    const { describeCall, fiber } = bench({
+      isLoopback: false,
+      canManageHost: true,
+    })
+    await fiber.await()
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('keeps Host settings unavailable for a remote browser without opt-in', async () => {
+    const { describeCall, fiber } = bench({
+      isLoopback: false,
+      canManageHost: false,
+    })
+    await fiber.await()
+    await Promise.resolve()
+    expect(describeCall).not.toHaveBeenCalled()
   })
 
   it('fiber disposal retires the service and its invalidation subscriptions', async () => {
     const { ctx, describeCall, fiber } = bench()
     await fiber.await()
-    await vi.waitFor(() => { expect(describeCall).toHaveBeenCalledTimes(1) })
+    await vi.waitFor(() => {
+      expect(describeCall).toHaveBeenCalledTimes(1)
+    })
     await fiber.dispose()
     expect(ctx.get('settingsScope')).toBeUndefined()
     expect(ctx.get('settingsSchema')).toBeUndefined()

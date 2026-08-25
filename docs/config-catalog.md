@@ -415,10 +415,16 @@ export interface ConnectionConfig {
   trustedHosts?: string[]
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
+  /**
+   * Permit trusted non-loopback authorities to call Host-management methods.
+   * This is an explicit deployment trust decision, not authentication: every
+   * client that can reach a trusted authority receives the capability.
+   */
+  allowRemoteManagement?: boolean
 }
 ```
 
-Source: [`packages/client/connection/src/index.ts:50`](../packages/client/connection/src/index.ts)
+Source: [`packages/client/connection/src/index.ts:62`](../packages/client/connection/src/index.ts)
 
 <a id="deepseek-aidsh-client-hmr"></a>
 

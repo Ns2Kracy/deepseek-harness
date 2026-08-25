@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+root=${DSH_ZIMAOS_STAGED_ROOT:-}
+exec "$root/usr/lib/deepseek-harness/node/bin/node" \
+  "$root/usr/lib/deepseek-harness/app/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+  "$@"

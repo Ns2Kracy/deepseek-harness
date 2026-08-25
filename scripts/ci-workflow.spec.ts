@@ -423,6 +423,189 @@ describe('Python release workflows', () => {
   })
 })
 
+describe('ZimaOS RAW workflow', () => {
+  it('publishes direct preview assets and serializes the rolling latest release', () => {
+    const workflow = loadWorkflow('.github/workflows/zimaos-raw.yml')
+    const pullRequest = workflowEvent(workflow, 'pull_request')
+    const push = workflowEvent(workflow, 'push')
+    const build = workflowJob(workflow, 'build')
+    const preview = workflowJob(workflow, 'publish-preview')
+    const publish = workflowJob(workflow, 'publish-latest')
+    if (
+      !Array.isArray(build.steps) ||
+      !Array.isArray(preview.steps) ||
+      !Array.isArray(publish.steps)
+    ) {
+      throw new TypeError('ZimaOS RAW jobs must define steps')
+    }
+    const buildSteps: unknown[] = build.steps
+    const previewSteps: unknown[] = preview.steps
+    const publishSteps: unknown[] = publish.steps
+
+    expect(pullRequest).toEqual({})
+    expect(push).toMatchObject({ branches: ['master'], tags: ['dsh-v*'] })
+    expect(workflow.concurrency).toMatchObject({
+      group:
+        "zimaos-raw-${{ startsWith(github.ref, 'refs/tags/dsh-v') && 'release' || github.ref }}",
+      'cancel-in-progress': false,
+    })
+    expect(build['runs-on']).toBe('ubuntu-24.04')
+    expect(build.permissions).toEqual({ contents: 'read' })
+    expect(preview).toMatchObject({
+      if: "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'",
+      needs: 'build',
+      permissions: { contents: 'write' },
+      concurrency: { group: 'zimaos-raw-preview', 'cancel-in-progress': false },
+    })
+    expect(publish.permissions).toEqual({ contents: 'write' })
+    expect(publish.if).toBe("startsWith(github.ref, 'refs/tags/dsh-v')")
+    expect(publish.needs).toBe('build')
+    expect(JSON.stringify(publishSteps)).toContain(
+      'sha256sum -c deepseek_harness.raw.sha256',
+    )
+
+    const buildJson = JSON.stringify(buildSteps)
+    expect(buildJson).toContain(
+      'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
+    )
+    expect(buildJson).toContain(
+      'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1',
+    )
+    expect(buildJson).toContain(runnerPrivatePnpmDestination)
+    expect(buildJson).toContain(
+      'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38',
+    )
+    const setupNode = buildSteps.find(
+      step =>
+        isRecord(step) &&
+        step.uses ===
+          'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38',
+    )
+    if (!isRecord(setupNode) || !isRecord(setupNode.with)) {
+      throw new TypeError('ZimaOS RAW setup-node step must define inputs')
+    }
+    expect(setupNode.with['node-version']).toBe('24.19.0')
+    expect(buildJson).toContain('pnpm install --frozen-lockfile')
+    expect(buildJson).toContain('squashfs-tools')
+    expect(buildJson).toContain('xz-utils')
+    expect(buildJson).toContain('musl-tools')
+    expect(buildJson).toContain('pnpm run build:zimaos-raw')
+    expect(buildJson).toContain('sha256sum -c deepseek_harness.raw.sha256')
+    expect(buildJson).toContain(
+      'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f',
+    )
+    expect(buildJson).toContain('deepseek_harness.raw.sha256')
+
+    const previewScript = previewSteps
+      .filter(
+        (step): step is Record<string, unknown> & { run: string } =>
+          isRecord(step) && typeof step.run === 'string',
+      )
+      .map(step => step.run)
+      .join('\n')
+    expect(previewScript).toContain('sha256sum -c deepseek_harness.raw.sha256')
+    expect(previewScript).not.toContain('gh release upload')
+    expect(previewScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id',
+    )
+    expect(previewScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
+    )
+    expect(previewScript).not.toContain('--hostname uploads.github.com')
+    expect(previewScript).toContain(
+      'https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(previewScript).toContain('releases="$(gh api --paginate --slurp')
+    expect(previewScript).toContain('release_ids="$(jq')
+    expect(previewScript).toContain('assets="$(gh api --paginate --slurp')
+    expect(previewScript).toContain('asset_ids="$(jq')
+    expect(previewScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(previewScript).toContain('startswith("untagged-")')
+    expect(previewScript).toContain(
+      'Multiple recoverable ZimaOS RAW preview drafts exist',
+    )
+    expect(previewScript).toContain(
+      '--force-with-lease="$preview_ref:$observed_oid"',
+    )
+    expect(previewScript).not.toContain('git push origin "$preview_ref" --force')
+    expect(previewScript).toContain('Refusing to create zimaos-raw-preview')
+    expect(previewScript).toContain('-F draft=true -F prerelease=true')
+    expect(previewScript).toContain(
+      '-f tag_name=zimaos-raw-preview -f target_commitish="$GITHUB_SHA"',
+    )
+    expect(previewScript).toContain(
+      '-F draft=false -F prerelease=true -f make_latest=false',
+    )
+    expect(previewScript).toContain(
+      '["deepseek_harness.raw", "deepseek_harness.raw.sha256"]',
+    )
+    expect(
+      previewScript.indexOf('https://uploads.github.com/repos/$GITHUB_REPOSITORY'),
+    ).toBeGreaterThan(
+      previewScript.indexOf('sha256sum -c deepseek_harness.raw.sha256'),
+    )
+
+    const releaseScript = publishSteps
+      .filter(
+        (step): step is Record<string, unknown> & { run: string } =>
+          isRecord(step) && typeof step.run === 'string',
+      )
+      .map(step => step.run)
+      .join('\n')
+    expect(releaseScript).toContain('git tag -f latest')
+    expect(releaseScript).toContain(
+      '--force-with-lease="$latest_ref:$observed_oid"',
+    )
+    expect(releaseScript).not.toContain('refs/tags/latest --force')
+    expect(releaseScript).toContain(
+      "git tag --list 'dsh-v*' --sort=-v:refname",
+    )
+    expect(releaseScript).toContain('Refusing to move latest backwards')
+    expect(releaseScript).not.toContain('gh release upload')
+    expect(releaseScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id',
+    )
+    expect(releaseScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/assets/$asset_id',
+    )
+    expect(releaseScript).not.toContain('--hostname uploads.github.com')
+    expect(releaseScript).toContain(
+      'https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(releaseScript).toContain('releases="$(gh api --paginate --slurp')
+    expect(releaseScript).toContain('release_ids="$(jq')
+    expect(releaseScript).toContain('assets="$(gh api --paginate --slurp')
+    expect(releaseScript).toContain('asset_ids="$(jq')
+    expect(releaseScript).toContain('startswith("untagged-")')
+    expect(releaseScript).toContain(
+      'repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset',
+    )
+    expect(releaseScript).toContain(
+      'Multiple recoverable ZimaOS RAW latest drafts exist',
+    )
+    expect(releaseScript).toContain('-F draft=true')
+    expect(releaseScript).toContain(
+      '-f tag_name=latest -f target_commitish="$GITHUB_SHA"',
+    )
+    expect(releaseScript).toContain('--latest')
+    expect(releaseScript).toContain(
+      '[\"deepseek_harness.raw\", \"deepseek_harness.raw.sha256\"]',
+    )
+    expect(
+      releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
+    ).toBeGreaterThan(
+      releaseScript.indexOf('https://uploads.github.com/repos/$GITHUB_REPOSITORY'),
+    )
+    expect(
+      releaseScript.indexOf('--force-with-lease="$latest_ref:$observed_oid"'),
+    ).toBeGreaterThan(releaseScript.indexOf('.draft == true'))
+    expect(releaseScript).not.toContain('--prerelease')
+    expect(releaseScript).not.toContain('--draft')
+  })
+})
+
 describe('Issue lifecycle workflow', () => {
   it('runs the lifecycle job on every PR/review event but gates token and board steps', () => {
     const lifecycle = loadWorkflow('.github/workflows/issue-lifecycle.yml')

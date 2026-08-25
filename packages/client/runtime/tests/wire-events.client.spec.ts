@@ -6,7 +6,10 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import type { ConnectionHandle, ConnectionSinks } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  ConnectionHandle,
+  ConnectionSinks,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 // Type-only: the api-remotes facade carries both the allowlist's selection seat
 // and the owner packages' `./types` declarations, which together give `$on` its
@@ -26,13 +29,16 @@ function forwardedEventContracts(ctx: Context): void {
   ctx.remote.$on('settings/document-updated', (namespace, source) => {
     // @ts-expect-error -- the brand survives the wire: a bare string is not a SettingsNamespace
     const bare: typeof namespace = 'plain-string'
-    void bare; void namespace; void source
+    void bare
+    void namespace
+    void source
   })
   ctx.remote.$on('credentials/reference-updated', () => {})
   ctx.remote.$on('commands/change', () => {})
   ctx.remote.$on('llm/adapters-updated', () => {})
   ctx.remote.$on('agent-preset/selected', (sessionId, agentPreset) => {
-    void sessionId; void agentPreset
+    void sessionId
+    void agentPreset
   })
   // @ts-expect-error -- client-local event outside the allowlist
   ctx.remote.$on('slots/changed', () => {})
@@ -56,11 +62,14 @@ async function mount(): Promise<Bench> {
   // Stands in for api-gateway's Remote service: this spec owns the carrier's
   // handoff, not the fan-out behind it.
   ctx.reflect.provide('remote', {
-    $dispatch: (event: string, args: readonly unknown[]) => { bench.dispatched.push([event, ...args]) },
+    $dispatch: (event: string, args: readonly unknown[]) => {
+      bench.dispatched.push([event, ...args])
+    },
   })
   const handle: ConnectionHandle = {
     api,
     isLoopback: true,
+    canManageHost: true,
     hostDescription: {
       getSnapshot: () => undefined,
       subscribe: () => () => {},
@@ -85,13 +94,21 @@ describe('wire event bridge', () => {
     const seen = bench.dispatched
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r1' as never,
-      payload: { type: 'host/remote-event', event: 'commands/change', args: [] },
+      payload: {
+        type: 'host/remote-event',
+        event: 'commands/change',
+        args: [],
+      },
     })
     expect(seen).toEqual([['commands/change']])
 
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r2' as never,
-      payload: { type: 'host/session-status', sessionId: 's1' as never, running: true },
+      payload: {
+        type: 'host/session-status',
+        sessionId: 's1' as never,
+        running: true,
+      },
     })
     expect(seen).toEqual([['commands/change']])
   })
@@ -102,18 +119,30 @@ describe('wire event bridge', () => {
 
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r3' as never,
-      payload: { type: 'host/remote-event', event: 'settings/document-updated', args: ['llm-pi-ai', 7] },
+      payload: {
+        type: 'host/remote-event',
+        event: 'settings/document-updated',
+        args: ['llm-pi-ai', 7],
+      },
     })
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r4' as never,
-      payload: { type: 'host/remote-event', event: 'credentials/reference-updated', args: ['OPENAI_API_KEY'] },
+      payload: {
+        type: 'host/remote-event',
+        event: 'credentials/reference-updated',
+        args: ['OPENAI_API_KEY'],
+      },
     })
     // The carrier does not second-guess the name: selecting what a consumer can
     // receive is the allowlist's job, and dropping an unsubscribed name is the
     // Remote service's. This plugin republishes whatever the frame carried.
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r5' as never,
-      payload: { type: 'host/remote-event', event: 'nobody/listening', args: ['ignored'] },
+      payload: {
+        type: 'host/remote-event',
+        event: 'nobody/listening',
+        args: ['ignored'],
+      },
     })
 
     expect(seen).toEqual([
@@ -126,8 +155,16 @@ describe('wire event bridge', () => {
   it('broadcasts connection/reset on every established generation (reconnect invalidation)', async () => {
     const bench = await mount()
     let resets = 0
-    bench.ctx.on('connection/reset', () => { resets++ })
-    const description = { version: '0', cwd: '/f', attachedSessions: 0, home: '/h', canOpenPath: true }
+    bench.ctx.on('connection/reset', () => {
+      resets++
+    })
+    const description = {
+      version: '0',
+      cwd: '/f',
+      attachedSessions: 0,
+      home: '/h',
+      canOpenPath: true,
+    }
     bench.sinks?.onConnected?.(description)
     bench.sinks?.onConnected?.(description) // second generation after a reconnect
     expect(resets).toBe(2)
